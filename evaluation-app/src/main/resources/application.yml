@@ -1,0 +1,77 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: ai-code-change-evaluation
+
+  # ---- PostgreSQL ----
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ai_evaluation
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+
+  # ---- Neo4j ----
+  neo4j:
+    uri: bolt://localhost:7687
+    authentication:
+      username: neo4j
+      password: neo4j
+
+  # ---- Kafka ----
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: index-service-group
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.sigma.ai.evaluation.trigger.consumer"
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    listener:
+      ack-mode: MANUAL_IMMEDIATE
+
+# ---- MyBatis ----
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+    default-fetch-size: 200
+    default-statement-timeout: 30
+
+# ---- Milvus ----
+milvus:
+  host: localhost
+  port: 19530
+
+# ---- Embedding API ----
+embedding:
+  url: https://dashscope.aliyuncs.com/api/v1/services/embeddings/text-embedding/text-embedding
+  api-key: ${EMBEDDING_API_KEY:your-api-key-here}
+  model: text-embedding-v3
+  batch-size: 25
+  dimension: 1536
+
+# ---- Kafka Topic ----
+kafka:
+  topic:
+    code-change-event: code-change-event
+
+# ---- 定时任务 ----
+index:
+  scheduler:
+    cron: "0 0 2 * * ?"
+
+# ---- 日志 ----
+logging:
+  level:
+    com.sigma.ai.evaluation: INFO
+    org.neo4j.driver: WARN
+    org.mybatis: WARN
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"

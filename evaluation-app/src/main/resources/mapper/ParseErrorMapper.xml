@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sigma.ai.evaluation.infrastructure.pg.mapper.ParseErrorMapper">
+
+    <insert id="insert" parameterType="com.sigma.ai.evaluation.infrastructure.pg.po.ParseErrorPO"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO t_parse_error (task_id, file_path, error_type, error_msg, created_at)
+        VALUES (#{taskId}, #{filePath}, #{errorType}, #{errorMsg}, #{createdAt})
+    </insert>
+
+</mapper>

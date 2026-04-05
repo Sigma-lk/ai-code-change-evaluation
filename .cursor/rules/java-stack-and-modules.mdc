@@ -1,0 +1,30 @@
+---
+description: JDK17、Docker 部署与多模块 Maven 分层结构
+alwaysApply: true
+---
+
+# 运行环境与模块划分
+
+## 技术栈
+
+- Java 使用 **JDK 17**。
+- 部署以 **Docker** 为准；新增服务或调整构建时考虑 Dockerfile / 镜像与运行环境一致。
+
+## Maven 多模块职责（严格遵守）
+
+| 模块 | 职责 |
+|------|------|
+| **xxx-api** | 对外暴露的 **interface**（契约、DTO 若放此处需与团队约定一致）。 |
+| **xxx-app** | Spring Boot **启动类**、`application*.yml/properties`、**MyBatis XML/SQL** 等与应用装配、持久化映射相关的配置与资源。 |
+| **xxx-domain** | **领域模型**：领域 **Service**、**Entity**、**Adapter**（存储等资源访问的**接口**，由基础设施实现）。 |
+| **xxx-infrastructure** | **基础设施**：直接访问 DB、Redis 等；**实现 domain 中的 Adapter**。 |
+| **xxx-trigger** | **外部触发**：定时任务、消息队列监听、**Controller** 等与应用边界交互的入口。 |
+| **xxx-types** | **常量**、枚举、跨模块共享且无业务编排的类型定义（按项目约定收敛）。 |
+
+新增代码时先判断归属模块，避免在错误层写 SQL、实现类或领域规则。
+
+## 父 POM 与依赖管理
+
+- 项目根目录使用 **父 POM** 统一管理依赖。
+- 在父 POM 中使用 **`<dependencyManagement>`** 锁定版本；子模块只声明 `groupId`/`artifactId`，不写版本（除非个别例外且需说明原因）。
+- 在父 POM 中用 **属性常量**（如 `<properties>` 中的 `spring-boot.version`、`mybatis.version` 等）集中管理版本号，避免魔法字符串散落在各子模块。

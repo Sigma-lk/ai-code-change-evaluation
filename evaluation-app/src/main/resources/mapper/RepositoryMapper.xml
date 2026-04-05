@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sigma.ai.evaluation.infrastructure.pg.mapper.RepositoryMapper">
+
+    <resultMap id="RepositoryPOMap" type="com.sigma.ai.evaluation.infrastructure.pg.po.RepositoryPO">
+        <id column="id" property="id"/>
+        <result column="name" property="name"/>
+        <result column="clone_url" property="cloneUrl"/>
+        <result column="branch" property="branch"/>
+        <result column="local_path" property="localPath"/>
+        <result column="status" property="status"/>
+        <result column="created_at" property="createdAt"/>
+    </resultMap>
+
+    <select id="selectAllActive" resultMap="RepositoryPOMap">
+        SELECT id, name, clone_url, branch, local_path, status, created_at
+        FROM t_repository
+        WHERE status = 'ACTIVE'
+        ORDER BY created_at
+    </select>
+
+    <select id="selectById" resultMap="RepositoryPOMap" parameterType="string">
+        SELECT id, name, clone_url, branch, local_path, status, created_at
+        FROM t_repository
+        WHERE id = #{id}
+    </select>
+
+</mapper>

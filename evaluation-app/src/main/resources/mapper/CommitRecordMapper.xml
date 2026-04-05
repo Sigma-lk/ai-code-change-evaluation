@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sigma.ai.evaluation.infrastructure.pg.mapper.CommitRecordMapper">
+
+    <select id="countByRepoIdAndCommitHash" resultType="int">
+        SELECT COUNT(1)
+        FROM t_commit_record
+        WHERE repo_id = #{repoId}
+          AND commit_hash = #{commitHash}
+    </select>
+
+    <insert id="insert" parameterType="com.sigma.ai.evaluation.infrastructure.pg.po.CommitRecordPO"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO t_commit_record (repo_id, commit_hash, author, commit_time, changed_file_count, processed_at)
+        VALUES (#{repoId}, #{commitHash}, #{author}, #{commitTime}, #{changedFileCount}, #{processedAt})
+    </insert>
+
+</mapper>

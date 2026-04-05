@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sigma.ai.evaluation.infrastructure.pg.mapper.IndexTaskMapper">
+
+    <resultMap id="IndexTaskPOMap" type="com.sigma.ai.evaluation.infrastructure.pg.po.IndexTaskPO">
+        <id column="id" property="id"/>
+        <result column="repo_id" property="repoId"/>
+        <result column="task_type" property="taskType"/>
+        <result column="trigger_commit" property="triggerCommit"/>
+        <result column="status" property="status"/>
+        <result column="started_at" property="startedAt"/>
+        <result column="finished_at" property="finishedAt"/>
+        <result column="error_msg" property="errorMsg"/>
+    </resultMap>
+
+    <insert id="insert" parameterType="com.sigma.ai.evaluation.infrastructure.pg.po.IndexTaskPO"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO t_index_task (repo_id, task_type, trigger_commit, status, started_at)
+        VALUES (#{repoId}, #{taskType}, #{triggerCommit}, #{status}, #{startedAt})
+    </insert>
+
+    <update id="updateStatus">
+        UPDATE t_index_task
+        SET status      = #{status},
+            finished_at = NOW(),
+            error_msg   = #{errorMsg}
+        WHERE id = #{id}
+    </update>
+
+    <select id="selectById" resultMap="IndexTaskPOMap" parameterType="long">
+        SELECT id, repo_id, task_type, trigger_commit, status, started_at, finished_at, error_msg
+        FROM t_index_task
+        WHERE id = #{id}
+    </select>
+
+</mapper>
