@@ -49,9 +49,8 @@ public class FileWalkerServiceImpl implements FileWalkerService {
             try (InputStream is = Files.newInputStream(file);
                  DigestInputStream dis = new DigestInputStream(is, md)) {
                 byte[] buffer = new byte[8192];
-                //noinspection StatementWithEmptyBody
                 while (dis.read(buffer) != -1) {
-                    // 边读边更新 digest
+                    // 由于包装了DigestInputStream，所以只需要读取即可更新md5
                 }
             }
             return HexFormat.of().formatHex(md.digest());

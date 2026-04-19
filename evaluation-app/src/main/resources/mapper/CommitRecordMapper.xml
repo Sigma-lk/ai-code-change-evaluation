@@ -12,8 +12,8 @@
 
     <insert id="insert" parameterType="com.sigma.ai.evaluation.infrastructure.pg.po.CommitRecordPO"
             useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO t_commit_record (repo_id, commit_hash, author, commit_time, changed_file_count, processed_at)
-        VALUES (#{repoId}, #{commitHash}, #{author}, #{commitTime}, #{changedFileCount}, #{processedAt})
+        INSERT INTO t_commit_record (repo_id, commit_hash, author, commit_time, changed_file_count, status, create_time, update_time)
+        VALUES (#{repoId}, #{commitHash}, #{author}, #{commitTime}, #{changedFileCount}, #{status}, NOW(), NOW())
     </insert>
 
 </mapper>

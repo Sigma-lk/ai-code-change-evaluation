@@ -15,7 +15,8 @@ public class RepositoryPO {
     private String cloneUrl;
     private String branch;
     private String localPath;
-    /** ACTIVE / INACTIVE */
-    private String status;
-    private LocalDateTime createdAt;
+    /** 1:ACTIVE 0:INACTIVE */
+    private Integer status;
+    private LocalDateTime createTime;
+    private LocalDateTime updateTime;
 }

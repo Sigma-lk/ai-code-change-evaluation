@@ -2,20 +2,26 @@ package com.sigma.ai.evaluation.infrastructure.embedding;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.sigma.ai.evaluation.types.ErrorCode;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.*;
+import org.apache.commons.lang3.StringUtils;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Embedding API 客户端，调用 Qwen / DeepSeek 的 text-embedding 接口获取向量。
- *
- * <p>接口格式参考通义千问 text-embedding-v3 规范。
+ * Embedding API 客户端，调用 OpenAI 兼容的 embeddings 接口获取向量。
  */
 @Slf4j
 @Component
@@ -47,44 +53,54 @@ public class EmbeddingApiClient {
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.setBearerAuth(properties.getApiKey());
+        if (StringUtils.isNotBlank(properties.getApiKey())) {
+            headers.setBearerAuth(properties.getApiKey());
+        }
 
+        List<float[]> allEmbeddings = new ArrayList<>(texts.size());
+        int batchSize = Math.max(1, properties.getBatchSize());
+        for (int start = 0; start < texts.size(); start += batchSize) {
+            int end = Math.min(start + batchSize, texts.size());
+            List<String> batch = texts.subList(start, end);
+            List<float[]> batchResult = requestBatch(headers, batch);
+            if (batchResult == null || batchResult.size() != batch.size()) {
+                log.warn("Embedding 批量向量数量不匹配，停止处理: expected={}, got={}",
+                        batch.size(), batchResult == null ? 0 : batchResult.size());
+                return null;
+            }
+            allEmbeddings.addAll(batchResult);
+        }
+        return allEmbeddings;
+    }
+
+    private List<float[]> requestBatch(HttpHeaders headers, List<String> texts) {
         Map<String, Object> body = Map.of(
                 "model", properties.getModel(),
-                "input", Map.of("texts", texts),
-                "parameters", Map.of("text_type", "document")
+                "input", texts,
+                "encoding_format", "float"
         );
-
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
         try {
             ResponseEntity<EmbeddingResponse> response = restTemplate.postForEntity(
                     properties.getUrl(), request, EmbeddingResponse.class);
-
-            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-                return response.getBody().getOutput().getEmbeddings().stream()
-                        .map(EmbeddingItem::getEmbedding)
-                        .toList();
+            if (response.getStatusCode() != HttpStatus.OK || response.getBody() == null || response.getBody().getData() == null) {
+                log.warn("[{}] Embedding API 返回异常状态: {}", ErrorCode.EMBEDDING_API_BAD_STATUS.getCode(), response.getStatusCode());
+                return null;
             }
-            log.warn("Embedding API 返回异常状态: {}", response.getStatusCode());
-            return null;
+            return response.getBody().getData().stream()
+                    .sorted(Comparator.comparingInt(EmbeddingItem::getIndex))
+                    .map(EmbeddingItem::getEmbedding)
+                    .toList();
         } catch (Exception e) {
-            log.error("调用 Embedding API 失败", e);
+            log.error("[{}] 调用 Embedding API 失败", ErrorCode.EMBEDDING_API_FAILED.getCode(), e);
             return null;
         }
     }
 
-    // -------- 响应 DTO --------
-
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class EmbeddingResponse {
-        private Output output;
-
-        @Data
-        @JsonIgnoreProperties(ignoreUnknown = true)
-        public static class Output {
-            private List<EmbeddingItem> embeddings;
-        }
+        private List<EmbeddingItem> data;
     }
 
     @Data
@@ -92,7 +108,8 @@ public class EmbeddingApiClient {
     public static class EmbeddingItem {
         @JsonProperty("embedding")
         private float[] embedding;
-        @JsonProperty("text_index")
-        private int textIndex;
+
+        @JsonProperty("index")
+        private int index;
     }
 }

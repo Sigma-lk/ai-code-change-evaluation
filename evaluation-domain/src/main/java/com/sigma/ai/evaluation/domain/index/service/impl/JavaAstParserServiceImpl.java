@@ -7,6 +7,7 @@ import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.*;
 import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.nodeTypes.NodeWithName;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
@@ -55,6 +56,7 @@ public class JavaAstParserServiceImpl implements JavaAstParserService {
                 .setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_17);
         JavaParser parser = new JavaParser(config);
 
+        // 解析源代码
         com.github.javaparser.ParseResult<CompilationUnit> parseResult;
         try {
             parseResult = parser.parse(javaFile);
@@ -81,11 +83,10 @@ public class JavaAstParserServiceImpl implements JavaAstParserService {
         }
     }
 
-    // ==================== 私有工具方法 ====================
-
+    // 创建源码解析器
     private CombinedTypeSolver buildTypeSolver(List<Path> sourceRoots) {
         CombinedTypeSolver solver = new CombinedTypeSolver();
-        // false = 不加载完整 JDK 反射树，只解析 java.lang 等核心包，性能更优
+        // 不加载完整 JDK 反射树，只解析 java.lang 等核心包，性能更优
         solver.add(new ReflectionTypeSolver(false));
         for (Path root : sourceRoots) {
             if (Files.isDirectory(root)) {
@@ -103,8 +104,7 @@ public class JavaAstParserServiceImpl implements JavaAstParserService {
         return ParseResult.builder().filePath(filePath).success(false).errorMessage(msg).build();
     }
 
-    // ==================== 解析上下文（私有静态内部类） ====================
-
+    // 解析上下文
     private static class ParseContext {
 
         private final Path javaFile;
@@ -126,7 +126,7 @@ public class JavaAstParserServiceImpl implements JavaAstParserService {
 
         void process(CompilationUnit cu) throws IOException {
             String pkgName = cu.getPackageDeclaration()
-                    .map(pd -> pd.getNameAsString())
+                    .map(NodeWithName::getNameAsString)
                     .orElse("");
 
             // 包节点
@@ -147,11 +147,11 @@ public class JavaAstParserServiceImpl implements JavaAstParserService {
                     .repoId(repoId)
                     .build();
 
-            // CONTAINS_FILE: Package → JavaFile
+            // 建立包到文件的映射，包包含Java文件
             addRelation(packageNode.getId(), "Package", "id",
                     RelationType.CONTAINS_FILE, filePath, "JavaFile", "path", null);
 
-            // import 语句 → IMPORTS 关系
+            // 为import 语句建立 IMPORTS关系 
             for (ImportDeclaration imp : cu.getImports()) {
                 if (!imp.isAsterisk() && !imp.isStatic()) {
                     addRelation(filePath, "JavaFile", "path",
@@ -171,7 +171,7 @@ public class JavaAstParserServiceImpl implements JavaAstParserService {
                     : (pkgName.isEmpty() ? td.getNameAsString() : pkgName + "." + td.getNameAsString());
 
             TypeKind kind = resolveTypeKind(td);
-            // isAbstract / isFinal 仅对 ClassOrInterfaceDeclaration 有意义
+            // 抽象、final、static识别
             boolean isAbstractFlag = (td instanceof ClassOrInterfaceDeclaration coid) && coid.isAbstract();
             boolean isFinalFlag = (td instanceof ClassOrInterfaceDeclaration c) && c.isFinal();
             boolean isStaticFlag = td.isStatic();
@@ -189,17 +189,17 @@ public class JavaAstParserServiceImpl implements JavaAstParserService {
                     .lineEnd(td.getRange().map(r -> r.end.line).orElse(0))
                     .build());
 
-            // DEFINES_TYPE: JavaFile → Type
+            // 建立文件到Java类型的关系（类、接口、枚举等）
             addRelation(filePath, "JavaFile", "path",
                     RelationType.DEFINES_TYPE, qualifiedName, "Type", "qualifiedName", null);
 
-            // INNER_CLASS_OF: InnerType → OuterType
+            // 建立内部类到外部类的关系
             if (outerQualifiedName != null) {
                 addRelation(qualifiedName, "Type", "qualifiedName",
                         RelationType.INNER_CLASS_OF, outerQualifiedName, "Type", "qualifiedName", null);
             }
 
-            // EXTENDS / IMPLEMENTS（仅适用于 Class/Interface）
+            // 建立继承、实现关系（适用类、接口）
             if (td instanceof ClassOrInterfaceDeclaration coid) {
                 for (ClassOrInterfaceType ext : coid.getExtendedTypes()) {
                     String extName = resolveClassOrInterfaceTypeName(ext);
@@ -261,11 +261,11 @@ public class JavaAstParserServiceImpl implements JavaAstParserService {
                         .lineNo(lineNo)
                         .build());
 
-                // HAS_FIELD: Type → Field
+                // 建立类型（类、接口、枚举等）到字段的关系
                 addRelation(ownerQualifiedName, "Type", "qualifiedName",
                         RelationType.HAS_FIELD, fieldId, "Field", "id", null);
 
-                // DEPENDS_ON: Type → 字段类型 Type（排除基本类型）
+                // 如果是非基本类型，还需要建立depends-on关系，也就是类与类之间的依赖关系
                 if (typeQualifiedName != null && !isPrimitiveLike(typeQualifiedName)) {
                     addRelation(ownerQualifiedName, "Type", "qualifiedName",
                             RelationType.DEPENDS_ON, typeQualifiedName, "Type", "qualifiedName", null);
@@ -290,7 +290,7 @@ public class JavaAstParserServiceImpl implements JavaAstParserService {
                     .lineEnd(md.getRange().map(r -> r.end.line).orElse(0))
                     .build());
 
-            // HAS_METHOD: Type → Method
+            // 建立类与方法的关系
             addRelation(ownerQualifiedName, "Type", "qualifiedName",
                     RelationType.HAS_METHOD, methodId, "Method", "id", null);
 
@@ -319,6 +319,7 @@ public class JavaAstParserServiceImpl implements JavaAstParserService {
                     .lineEnd(cd.getRange().map(r -> r.end.line).orElse(0))
                     .build());
 
+            // 建立类与构造器方法的关系
             addRelation(ownerQualifiedName, "Type", "qualifiedName",
                     RelationType.HAS_METHOD, methodId, "Method", "id", null);
 
@@ -335,17 +336,17 @@ public class JavaAstParserServiceImpl implements JavaAstParserService {
                         ResolvedMethodDeclaration resolved = n.resolve();
                         String calleeId = buildCalleeIdFromResolved(resolved);
                         int lineNo = n.getRange().map(r -> r.begin.line).orElse(0);
+                        // 建立方法调用关系
                         addRelation(callerMethodId, "Method", "id",
                                 RelationType.CALLS, calleeId, "Method", "id",
                                 Map.of("lineNo", lineNo));
                     } catch (Exception e) {
                         // 外部依赖或解析失败时跳过，不影响其他关系提取
+                        log.error("外部依赖解析失败", e);
                     }
                 }
             }, null);
         }
-
-        // ---- 工具方法 ----
 
         private void addRelation(String fromId, String fromLabel, String fromKey,
                                  RelationType type, String toId, String toLabel, String toKey,

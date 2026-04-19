@@ -5,6 +5,7 @@ import com.sigma.ai.evaluation.domain.index.model.IndexTask;
 import com.sigma.ai.evaluation.infrastructure.pg.mapper.IndexTaskMapper;
 import com.sigma.ai.evaluation.infrastructure.pg.po.IndexTaskPO;
 import com.sigma.ai.evaluation.types.TaskStatus;
+import com.sigma.ai.evaluation.types.TaskType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -26,9 +27,10 @@ public class IndexTaskPortImpl implements IndexTaskPort {
         po.setRepoId(task.getRepoId());
         po.setTaskType(task.getTaskType().name());
         po.setTriggerCommit(task.getTriggerCommit());
-        po.setStatus(task.getStatus().name());
-        po.setStartedAt(toLocalDateTime(task.getStartedAt() != null
-                ? task.getStartedAt().toEpochMilli() : System.currentTimeMillis()));
+        po.setStatus(task.getStatus().ordinal());
+        if (task.getStartedAt() != null) {
+            po.setStartTime(LocalDateTime.ofInstant(task.getStartedAt(), ZoneOffset.UTC));
+        }
         indexTaskMapper.insert(po);
         task.setId(po.getId());
         return task;
@@ -36,7 +38,7 @@ public class IndexTaskPortImpl implements IndexTaskPort {
 
     @Override
     public void updateTaskStatus(Long taskId, TaskStatus status, String errorMsg) {
-        indexTaskMapper.updateStatus(taskId, status.name(), errorMsg);
+        indexTaskMapper.updateStatus(taskId, status.ordinal(), errorMsg);
     }
 
     @Override
@@ -49,18 +51,14 @@ public class IndexTaskPortImpl implements IndexTaskPort {
         return IndexTask.builder()
                 .id(po.getId())
                 .repoId(po.getRepoId())
-                .taskType(com.sigma.ai.evaluation.types.TaskType.valueOf(po.getTaskType()))
+                .taskType(TaskType.valueOf(po.getTaskType()))
                 .triggerCommit(po.getTriggerCommit())
-                .status(TaskStatus.valueOf(po.getStatus()))
-                .startedAt(po.getStartedAt() != null
-                        ? po.getStartedAt().toInstant(ZoneOffset.UTC) : null)
-                .finishedAt(po.getFinishedAt() != null
-                        ? po.getFinishedAt().toInstant(ZoneOffset.UTC) : null)
+                .status(TaskStatus.values()[po.getStatus()])
+                .startedAt(po.getStartTime() != null
+                        ? po.getStartTime().toInstant(ZoneOffset.UTC) : null)
+                .finishedAt(po.getFinishTime() != null
+                        ? po.getFinishTime().toInstant(ZoneOffset.UTC) : null)
                 .errorMsg(po.getErrorMsg())
                 .build();
-    }
-
-    private LocalDateTime toLocalDateTime(long epochMillis) {
-        return LocalDateTime.ofEpochSecond(epochMillis / 1000, 0, ZoneOffset.UTC);
     }
 }

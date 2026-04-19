@@ -16,5 +16,8 @@ public class CommitRecordPO {
     private String author;
     private LocalDateTime commitTime;
     private Integer changedFileCount;
-    private LocalDateTime processedAt;
+    /** 1:PROCESSED 2:SKIPPED */
+    private Integer status;
+    private LocalDateTime createTime;
+    private LocalDateTime updateTime;
 }

@@ -1,0 +1,197 @@
+# 本地开发中间件一键启动
+# 启动命令：docker compose up -d
+# 停止命令：docker compose down
+# 清空数据：docker compose down -v
+
+services:
+
+  # ------------------------------------------------------------------ #
+  #  PostgreSQL — 任务流水 / 仓库注册 / 幂等控制                          #
+  # ------------------------------------------------------------------ #
+  postgres:
+    image: postgres:15-alpine
+    container_name: ai-eval-postgres
+    environment:
+      POSTGRES_DB: ai_evaluation
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # 容器首次启动时自动建表
+      - ./evaluation-app/src/main/resources/db/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d ai_evaluation" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ------------------------------------------------------------------ #
+  #  Neo4j — 代码知识图谱（结构 + 关系）                                  #
+  # ------------------------------------------------------------------ #
+  neo4j:
+    image: neo4j:5.15-community
+    container_name: ai-eval-neo4j
+    environment:
+      # Neo4j 5.x 要求密码 ≥ 8 位
+      NEO4J_AUTH: neo4j/neo4j_pass
+      # 关闭企业版许可证检查
+      NEO4J_ACCEPT_LICENSE_AGREEMENT: "yes"
+    ports:
+      - "7474:7474"   # Browser 控制台
+      - "7687:7687"   # Bolt 协议
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -q --spider http://localhost:7474 || exit 1" ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  # ------------------------------------------------------------------ #
+  #  Kafka — 代码变更事件队列（KRaft 模式，无需 ZooKeeper）               #
+  # ------------------------------------------------------------------ #
+  kafka:
+    # 官方镜像使用 KAFKA_*（点号改下划线）；Bitnami 的 KAFKA_CFG_* 在此无效，会导致缺少 process.roles
+    # 命名卷挂载到 /var/lib/kafka/data 后属主多为 root，默认进程用户 appuser 无法写元数据 → AccessDeniedException；本地开发用 root
+    # log.dirs 下只能有分区目录；若复用曾挂到 Bitnami 的卷，根目录常有 config/ 会导致 “config is not in the form of topic-partition” → 使用独立卷名 kafka_apache_data
+    image: apache/kafka:4.0.2
+    container_name: ai-eval-kafka
+    user: root
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      # 宿主机应用通过 localhost:9092 连接
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    ports:
+      - "9092:9092"
+    volumes:
+      - kafka_apache_data:/var/lib/kafka/data
+    healthcheck:
+      test: [ "CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1" ]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  # ------------------------------------------------------------------ #
+  #  etcd — Milvus 元数据存储                                            #
+  # ------------------------------------------------------------------ #
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.5
+    container_name: ai-eval-etcd
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    command:
+      - etcd
+      - --advertise-client-urls=http://etcd:2379
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --data-dir=/etcd
+    volumes:
+      - etcd_data:/etcd
+    healthcheck:
+      test: [ "CMD-SHELL", "etcdctl endpoint health || exit 1" ]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # ------------------------------------------------------------------ #
+  #  MinIO — Milvus 向量数据对象存储                                      #
+  # ------------------------------------------------------------------ #
+  minio:
+    image: minio/minio:RELEASE.2023-03-13T19-46-17Z
+    container_name: ai-eval-minio
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    command: minio server /minio_data --console-address ":9001"
+    ports:
+      - "9001:9001"   # MinIO 控制台
+    volumes:
+      - minio_data:/minio_data
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1" ]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # ------------------------------------------------------------------ #
+  #  Milvus Standalone — 代码节点语义向量存储                             #
+  # ------------------------------------------------------------------ #
+  milvus:
+    image: milvusdb/milvus:v2.3.3
+    container_name: ai-eval-milvus
+    command: [ "milvus", "run", "standalone" ]
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+    ports:
+      - "19530:19530"   # gRPC / SDK 接口
+      - "9091:9091"     # Metrics
+    volumes:
+      - milvus_data:/var/lib/milvus
+    depends_on:
+      etcd:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  # ------------------------------------------------------------------ #
+  #  Attu — Milvus Web 管理界面（独立容器，需与 Milvus 大版本线匹配）          #
+  #  浏览器访问：http://localhost:8000 ；连接地址在 MILVUS_URL（勿用 localhost） #
+  # ------------------------------------------------------------------ #
+  attu:
+    image: zilliz/attu:v2.3.5
+    container_name: ai-eval-attu
+    environment:
+      # 容器网络内使用服务名 milvus，不可写 127.0.0.1
+      MILVUS_URL: milvus:19530
+    ports:
+      - "8000:3000"
+    depends_on:
+      - milvus
+
+  # ------------------------------------------------------------------ #
+  #  BGE-M3 Embedding — 本地向量化服务（OpenAI 兼容接口）                  #
+  # ------------------------------------------------------------------ #
+  embedding:
+    build:
+      context: ./docker/embedding-service
+      dockerfile: Dockerfile
+    container_name: ai-eval-embedding
+    ports:
+      - "8081:8081"
+    # 绑定到仓库内目录，便于在宿主机预先下载模型（与 Dockerfile 中 HF_HOME=/models/.cache 对应 → 宿主机为 ./data/hf-cache/.cache）
+    volumes:
+      - ./data/hf-cache:/models
+    environment:
+      MODEL_ID: BAAI/bge-m3
+      HF_TOKEN: ${HF_TOKEN:-}
+      # 避免走 Xet CAS（部分网络下 DNS 劫持会导致 TLS 证书与域名不匹配，模型无法下载、进程卡在启动）
+      HF_HUB_DISABLE_XET: "1"
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:8081/health || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+
+volumes:
+  postgres_data:
+  neo4j_data:
+  kafka_apache_data:
+  etcd_data:
+  minio_data:
+  milvus_data:

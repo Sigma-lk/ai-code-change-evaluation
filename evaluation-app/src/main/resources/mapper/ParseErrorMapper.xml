@@ -5,8 +5,8 @@
 
     <insert id="insert" parameterType="com.sigma.ai.evaluation.infrastructure.pg.po.ParseErrorPO"
             useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO t_parse_error (task_id, file_path, error_type, error_msg, created_at)
-        VALUES (#{taskId}, #{filePath}, #{errorType}, #{errorMsg}, #{createdAt})
+        INSERT INTO t_parse_error (task_id, file_path, error_type, error_msg, status, create_time, update_time)
+        VALUES (#{taskId}, #{filePath}, #{errorType}, #{errorMsg}, #{status}, NOW(), NOW())
     </insert>
 
 </mapper>

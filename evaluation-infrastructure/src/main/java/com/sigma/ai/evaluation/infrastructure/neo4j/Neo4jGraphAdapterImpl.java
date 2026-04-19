@@ -2,11 +2,14 @@ package com.sigma.ai.evaluation.infrastructure.neo4j;
 
 import com.sigma.ai.evaluation.domain.codegraph.adapter.GraphAdapter;
 import com.sigma.ai.evaluation.domain.codegraph.model.*;
+import com.sigma.ai.evaluation.domain.codegraph.model.expand.*;
 import com.sigma.ai.evaluation.types.RelationType;
+import com.sigma.ai.evaluation.types.exception.StorageException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.Session;
+import org.neo4j.driver.Value;
 import org.neo4j.driver.Values;
 import org.springframework.stereotype.Component;
 
@@ -32,8 +35,7 @@ import java.util.stream.Collectors;
 public class Neo4jGraphAdapterImpl implements GraphAdapter {
 
     private final Driver driver;
-
-    // ==================== 节点写入 ====================
+    private final Neo4jSubgraphExpander subgraphExpander;
 
     @Override
     public void batchMergeRepositoryNodes(List<RepositoryNode> nodes) {
@@ -44,6 +46,16 @@ public class Neo4jGraphAdapterImpl implements GraphAdapter {
                 SET r.name = n.name, r.url = n.url,
                     r.defaultBranch = n.defaultBranch, r.updatedAt = n.updatedAt
                 """;
+        /*
+        参数转换
+        {
+            id: xxx,
+            name: xxx,
+            url: xxx,
+            defaultBranch: xxx,
+            updatedAt: xxx
+        }
+         */
         List<Map<String, Object>> params = nodes.stream().map(n -> {
             Map<String, Object> m = new HashMap<>();
             m.put("id", n.getId());
@@ -429,11 +441,11 @@ public class Neo4jGraphAdapterImpl implements GraphAdapter {
     @Override
     public List<String> findCallerMethodIds(List<String> methodIds, int maxHops) {
         if (methodIds == null || methodIds.isEmpty()) return Collections.emptyList();
+        // DISTINCT 与 ORDER BY length(path) 不能同时使用（path 对同一 caller 可能有多条），此处只返回调用方 ID 集合
         String cypher = """
                 MATCH path = (caller:Method)-[:CALLS*1..$maxHops]->(changed:Method)
                 WHERE changed.id IN $methodIds
                 RETURN DISTINCT caller.id AS callerId
-                ORDER BY length(path)
                 """.replace("$maxHops", String.valueOf(maxHops));
         try (Session session = driver.session()) {
             return session.run(cypher, Values.parameters("methodIds", methodIds))
@@ -464,16 +476,185 @@ public class Neo4jGraphAdapterImpl implements GraphAdapter {
         try (Session session = driver.session()) {
             var result = session.run(cypher, Values.parameters("filePath", filePath));
             if (result.hasNext()) {
-                var value = result.next().get("checksum");
+                Value value = result.next().get("checksum");
                 return value.isNull() ? null : value.asString();
             }
             return null;
         }
     }
 
-    // ==================== 私有工具 ====================
+    @Override
+    public ExpandedGraph expandSubgraph(GraphExpandQuery query) {
+        return subgraphExpander.expand(query);
+    }
 
-    private void runWrite(String cypher, org.neo4j.driver.Value params) {
+    @Override
+    public List<CodeNodeDetail> loadCodeNodeDetails(List<String> nodeIdsOrTypeKeys) {
+        if (nodeIdsOrTypeKeys == null || nodeIdsOrTypeKeys.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<String> ids = nodeIdsOrTypeKeys.stream().filter(Objects::nonNull).distinct().toList();
+        String cypher = """
+                UNWIND $ids AS nid
+                OPTIONAL MATCH (m:Method {id: nid})
+                OPTIONAL MATCH (t:Type {qualifiedName: nid})
+                OPTIONAL MATCH (fd:Field {id: nid})
+                WITH nid, m, t, fd
+                WHERE m IS NOT NULL OR t IS NOT NULL OR fd IS NOT NULL
+                RETURN
+                  coalesce(m.id, t.qualifiedName, fd.id) AS id,
+                  CASE
+                    WHEN m IS NOT NULL THEN 'Method'
+                    WHEN t IS NOT NULL THEN 'Type'
+                    ELSE 'Field'
+                  END AS label,
+                  coalesce(m.signature, t.qualifiedName, fd.simpleName) AS signature,
+                  coalesce(m.ownerQualifiedName, t.qualifiedName, fd.ownerQualifiedName) AS ownerQualifiedName,
+                  coalesce(m.filePath, t.filePath, fd.filePath) AS filePath,
+                  coalesce(m.lineStart, t.lineStart, fd.lineNo) AS lineStart,
+                  coalesce(m.lineEnd, t.lineEnd) AS lineEnd,
+                  coalesce(m.simpleName, t.simpleName, fd.simpleName) AS simpleName,
+                  coalesce(m.id, t.qualifiedName, fd.id) AS qualifiedName
+                """;
+        List<CodeNodeDetail> out = new ArrayList<>();
+        try (Session session = driver.session()) {
+            var result = session.run(cypher, Values.parameters("ids", ids));
+            while (result.hasNext()) {
+                var rec = result.next();
+                CodeNodeDetail.CodeNodeDetailBuilder b = CodeNodeDetail.builder()
+                        .id(rec.get("id").asString())
+                        .label(rec.get("label").asString())
+                        .signature(nullToNull(rec.get("signature")))
+                        .ownerQualifiedName(nullToNull(rec.get("ownerQualifiedName")))
+                        .filePath(nullToNull(rec.get("filePath")))
+                        .simpleName(nullToNull(rec.get("simpleName")))
+                        .qualifiedName(nullToNull(rec.get("qualifiedName")));
+                if (!rec.get("lineStart").isNull()) {
+                    b.lineStart(rec.get("lineStart").asInt());
+                }
+                if (!rec.get("lineEnd").isNull()) {
+                    b.lineEnd(rec.get("lineEnd").asInt());
+                }
+                out.add(b.build());
+            }
+        } catch (Exception e) {
+            log.warn("Neo4j loadCodeNodeDetails 失败: {}", e.getMessage());
+        }
+        return out;
+    }
+
+    private static String nullToNull(Value v) {
+        return v.isNull() ? null : v.asString();
+    }
+
+    @Override
+    public CommitSeedSnapshot findCommitSeedsInGraph(String repoId, String commitHash) {
+        if (commitHash == null || commitHash.isBlank()) {
+            return CommitSeedSnapshot.builder().graphHit(false).build();
+        }
+        String cypher = """
+                MATCH (c:Commit {hash: $hash})
+                WHERE c.repoId = $repoId
+                OPTIONAL MATCH (m:Method)-[:CHANGED_IN]->(c)
+                OPTIONAL MATCH (t:Type)-[:CHANGED_IN]->(c)
+                RETURN collect(DISTINCT m.id) AS mids, collect(DISTINCT t.qualifiedName) AS tqns
+                """;
+        try (Session session = driver.session()) {
+            var result = session.run(cypher, Values.parameters("hash", commitHash, "repoId", repoId));
+            if (!result.hasNext()) {
+                return CommitSeedSnapshot.builder().graphHit(false).build();
+            }
+            var rec = result.next();
+            List<String> mids = rec.get("mids").asList(v -> v.isNull() ? null : v.asString()).stream()
+                    .filter(Objects::nonNull)
+                    .toList();
+            List<String> tqns = rec.get("tqns").asList(v -> v.isNull() ? null : v.asString()).stream()
+                    .filter(Objects::nonNull)
+                    .toList();
+            boolean hit = !mids.isEmpty() || !tqns.isEmpty();
+            return CommitSeedSnapshot.builder()
+                    .methodIds(new ArrayList<>(mids))
+                    .typeQualifiedNames(new ArrayList<>(tqns))
+                    .graphHit(hit)
+                    .build();
+        } catch (Exception e) {
+            log.warn("Neo4j findCommitSeedsInGraph 失败: {}", e.getMessage());
+            return CommitSeedSnapshot.builder().graphHit(false).build();
+        }
+    }
+
+    @Override
+    public List<String> findMethodIdsByTypeQualifiedNames(List<String> qualifiedNames) {
+        if (qualifiedNames == null || qualifiedNames.isEmpty()) {
+            return Collections.emptyList();
+        }
+        String cypher = """
+                UNWIND $qns AS qn
+                MATCH (t:Type {qualifiedName: qn})-[:HAS_METHOD]->(m:Method)
+                RETURN DISTINCT m.id AS id
+                """;
+        try (Session session = driver.session()) {
+            return session.run(cypher, Values.parameters("qns", qualifiedNames))
+                    .list(r -> r.get("id").asString());
+        } catch (Exception e) {
+            log.warn("Neo4j findMethodIdsByTypeQualifiedNames 失败: {}", e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    @Override
+    public List<String> findMethodIdsByJavaFilePaths(List<String> paths) {
+        if (paths == null || paths.isEmpty()) {
+            return Collections.emptyList();
+        }
+        String cypher = """
+                UNWIND $paths AS p
+                MATCH (f:JavaFile)
+                WHERE f.path = p OR f.relativePath = p
+                MATCH (f)-[:DEFINES_TYPE]->(:Type)-[:HAS_METHOD]->(m:Method)
+                RETURN DISTINCT m.id AS id
+                """;
+        try (Session session = driver.session()) {
+            return session.run(cypher, Values.parameters("paths", paths))
+                    .list(r -> r.get("id").asString());
+        } catch (Exception e) {
+            log.warn("Neo4j findMethodIdsByJavaFilePaths 失败: {}", e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    @Override
+    public List<String> listEmbeddingKeysForJavaFile(String javaFileAbsolutePath) {
+        if (javaFileAbsolutePath == null || javaFileAbsolutePath.isBlank()) {
+            return Collections.emptyList();
+        }
+        String cypher = """
+                MATCH (f:JavaFile {path: $path})-[:DEFINES_TYPE]->(t:Type)
+                OPTIONAL MATCH (t)-[:HAS_METHOD]->(m:Method)
+                RETURN collect(DISTINCT t.qualifiedName) AS tqns, collect(DISTINCT m.id) AS mids
+                """;
+        try (Session session = driver.session()) {
+            var result = session.run(cypher, Values.parameters("path", javaFileAbsolutePath));
+            if (!result.hasNext()) {
+                return Collections.emptyList();
+            }
+            var rec = result.next();
+            List<String> keys = new ArrayList<>();
+            keys.addAll(rec.get("tqns").asList(v -> v.isNull() ? null : v.asString()).stream()
+                    .filter(Objects::nonNull)
+                    .toList());
+            keys.addAll(rec.get("mids").asList(v -> v.isNull() ? null : v.asString()).stream()
+                    .filter(Objects::nonNull)
+                    .toList());
+            return keys.stream().filter(s -> !s.isBlank()).distinct().toList();
+        } catch (Exception e) {
+            log.warn("Neo4j listEmbeddingKeysForJavaFile 失败: {}", e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    // 获取连接，写入neo4j
+    private void runWrite(String cypher, Value params) {
         try (Session session = driver.session()) {
             session.executeWrite(tx -> {
                 tx.run(cypher, params);
@@ -481,7 +662,7 @@ public class Neo4jGraphAdapterImpl implements GraphAdapter {
             });
         } catch (Exception e) {
             log.error("Neo4j 写入异常, cypher={}", cypher.substring(0, Math.min(100, cypher.length())), e);
-            throw e;
+            throw StorageException.neo4jWriteError(e);
         }
     }
 }

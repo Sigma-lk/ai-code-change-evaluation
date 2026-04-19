@@ -6,9 +6,6 @@ import com.sigma.ai.evaluation.infrastructure.pg.po.ParseErrorPO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
-
 /**
  * {@link ParseErrorPort} 的 PostgreSQL 实现。
  */
@@ -25,7 +22,8 @@ public class ParseErrorPortImpl implements ParseErrorPort {
         po.setFilePath(filePath);
         po.setErrorType(errorType);
         po.setErrorMsg(errorMsg);
-        po.setCreatedAt(LocalDateTime.now(ZoneOffset.UTC));
+        // 0:UNRESOLVED
+        po.setStatus(0);
         parseErrorMapper.insert(po);
     }
 }

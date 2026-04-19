@@ -1,5 +1,8 @@
 package com.sigma.ai.evaluation.domain.embedding.adapter;
 
+import com.sigma.ai.evaluation.domain.embedding.model.EmbeddingSearchHit;
+import com.sigma.ai.evaluation.domain.embedding.model.EmbeddingSearchQuery;
+
 import java.util.List;
 
 /**
@@ -49,4 +52,19 @@ public interface EmbeddingStoreAdapter {
      * @return 相似节点 id 列表
      */
     List<String> semanticSearch(String queryText, String repoId, int topK);
+
+    /**
+     * 语义检索（富结果）：含分数、节点类型、全限定名；支持仓库与 node_type 过滤及最低分阈值。
+     *
+     * @param query 检索参数
+     * @return 命中列表（可能少于 topK）
+     */
+    List<EmbeddingSearchHit> semanticSearchRich(EmbeddingSearchQuery query);
+
+    /**
+     * 按 node_id 批量删除向量（与 {@link #upsertEmbedding} 主键规则一致）。
+     *
+     * @param nodeIds 节点 id 列表，空列表则忽略
+     */
+    void deleteEmbeddingsByNodeIds(List<String> nodeIds);
 }

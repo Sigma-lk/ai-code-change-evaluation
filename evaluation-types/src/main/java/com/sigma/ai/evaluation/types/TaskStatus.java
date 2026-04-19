@@ -5,15 +5,15 @@ package com.sigma.ai.evaluation.types;
  */
 public enum TaskStatus {
 
-    /** 等待执行 */
+    // 等待执行
     PENDING,
 
-    /** 执行中 */
+    // 执行中
     RUNNING,
 
-    /** 执行成功 */
+    // 执行成功
     SUCCESS,
 
-    /** 执行失败 */
+    // 执行失败
     FAIL
 }

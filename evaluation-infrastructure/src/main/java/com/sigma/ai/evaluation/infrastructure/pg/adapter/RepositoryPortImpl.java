@@ -38,7 +38,7 @@ public class RepositoryPortImpl implements RepositoryPort {
                 .cloneUrl(po.getCloneUrl())
                 .branch(po.getBranch())
                 .localPath(po.getLocalPath())
-                .status(po.getStatus())
+                .status(po.getStatus() != null && po.getStatus() == 1 ? "ACTIVE" : "INACTIVE")
                 .build();
     }
 }

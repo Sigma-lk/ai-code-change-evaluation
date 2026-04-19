@@ -37,3 +37,6 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+# Embedding 模型 Hugging Face 缓存（本地挂载，体积大勿提交）
+data/hf-cache/

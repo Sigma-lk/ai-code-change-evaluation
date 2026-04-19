@@ -3,13 +3,14 @@ package com.sigma.ai.evaluation.infrastructure.git;
 import com.sigma.ai.evaluation.domain.repository.adapter.GitAdapter;
 import com.sigma.ai.evaluation.domain.repository.model.ChangedFile;
 import com.sigma.ai.evaluation.types.FileChangeType;
+import com.sigma.ai.evaluation.types.exception.GitOperationException;
+import com.sigma.ai.evaluation.types.exception.ResourceNotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.diff.DiffEntry;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.Repository;
-import org.eclipse.jgit.revwalk.RevWalk;
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 import org.eclipse.jgit.treewalk.AbstractTreeIterator;
 import org.eclipse.jgit.treewalk.CanonicalTreeParser;
@@ -32,21 +33,26 @@ public class JGitAdapterImpl implements GitAdapter {
         File localDir = new File(localPath);
         File gitDir = new File(localPath, ".git");
 
-        try {
-            if (gitDir.exists()) {
-                // 已存在本地仓库，执行 pull
+        if (gitDir.exists()) {
+            try {
                 log.info("本地仓库已存在，执行 git pull: {}", localPath);
                 try (Git git = Git.open(localDir)) {
                     git.pull()
-                            .setRemoteBranchName(branch)
-                            .call();
+                        .setRemoteBranchName(branch)
+                        .call();
                     log.info("git pull 完成: {}, branch={}", localPath, branch);
                 }
-            } else {
-                // 首次 clone
+            } catch (IOException | GitAPIException e) {
+                log.error("git pull 失败: url={}, localPath={}", cloneUrl, localPath, e);
+                throw GitOperationException.pullFailed(e);
+            }
+        } else {
+            try {
                 log.info("开始 git clone: url={}, branch={}, localPath={}", cloneUrl, branch, localPath);
-                //noinspection ResultOfMethodCallIgnored
-                localDir.mkdirs();
+                boolean flag = localDir.mkdirs();
+                if (!flag) {
+                    throw ResourceNotFoundException.folderCreateFail(localPath);
+                }
                 try (Git git = Git.cloneRepository()
                         .setURI(cloneUrl)
                         .setBranch(branch)
@@ -55,9 +61,14 @@ public class JGitAdapterImpl implements GitAdapter {
                     log.info("git clone 完成: {}", localPath);
                 }
             }
-        } catch (IOException | GitAPIException e) {
-            log.error("git clone/pull 失败: url={}, localPath={}", cloneUrl, localPath, e);
-            throw new RuntimeException("git clone/pull 失败: " + e.getMessage(), e);
+            catch (ResourceNotFoundException e) {
+                log.error("文件夹创建失败: localPath={}", localPath, e);
+                throw e;
+            }
+            catch (GitAPIException e) {
+                log.error("git clone 失败: url={}, localPath={}", cloneUrl, localPath, e);
+                throw GitOperationException.cloneFailed(e);
+            }
         }
     }
 
@@ -110,10 +121,16 @@ public class JGitAdapterImpl implements GitAdapter {
 
         } catch (IOException | GitAPIException e) {
             log.error("git diff 失败: localPath={}, old={}, new={}", localPath, oldCommit, newCommit, e);
-            throw new RuntimeException("git diff 失败: " + e.getMessage(), e);
+            throw GitOperationException.diffFailed(e);
         }
 
         return changedFiles;
+    }
+
+    @Override
+    public List<ChangedFile> diffCommitAgainstFirstParent(String localPath, String commitHash) {
+        String parent = commitHash + "^";
+        return diffCommits(localPath, parent, commitHash);
     }
 
     @Override
@@ -125,12 +142,12 @@ public class JGitAdapterImpl implements GitAdapter {
             ObjectId headId = repository.resolve("refs/heads/" + branch);
             if (headId == null) {
                 log.warn("分支不存在: {}", branch);
-                return null;
+                throw ResourceNotFoundException.gitBranchNotFound(branch);
             }
             return headId.getName();
         } catch (IOException e) {
             log.error("获取 HEAD commit hash 失败: localPath={}, branch={}", localPath, branch, e);
-            throw new RuntimeException("获取 HEAD commit hash 失败: " + e.getMessage(), e);
+            throw GitOperationException.headHashFailed(e);
         }
     }
 

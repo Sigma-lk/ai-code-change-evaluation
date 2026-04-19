@@ -1,5 +1,6 @@
 package com.sigma.ai.evaluation.trigger.scheduler;
 
+import com.sigma.ai.evaluation.api.scheduler.IndexSchedulerApi;
 import com.sigma.ai.evaluation.domain.index.service.FullIndexService;
 import com.sigma.ai.evaluation.domain.repository.adapter.RepositoryPort;
 import com.sigma.ai.evaluation.domain.repository.model.RepositoryInfo;
@@ -17,7 +18,7 @@ import java.util.List;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class IndexScheduler {
+public class IndexScheduler implements IndexSchedulerApi {
 
     private final RepositoryPort repositoryPort;
     private final FullIndexService fullIndexService;
@@ -27,6 +28,7 @@ public class IndexScheduler {
      * cron 表达式：每天 02:00 触发。
      * 实际部署时可通过配置文件 {@code index.scheduler.cron} 覆盖。
      */
+    @Override
     @Scheduled(cron = "${index.scheduler.cron:0 0 2 * * ?}")
     public void scheduledFullIndex() {
         List<RepositoryInfo> repos = repositoryPort.findAllActive();

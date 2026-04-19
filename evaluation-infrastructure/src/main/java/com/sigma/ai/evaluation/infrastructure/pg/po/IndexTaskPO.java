@@ -15,9 +15,11 @@ public class IndexTaskPO {
     /** FULL / INCREMENTAL */
     private String taskType;
     private String triggerCommit;
-    /** PENDING / RUNNING / SUCCESS / FAIL */
-    private String status;
-    private LocalDateTime startedAt;
-    private LocalDateTime finishedAt;
+    /** 0:PENDING 1:RUNNING 2:SUCCESS 3:FAIL */
+    private Integer status;
+    private LocalDateTime startTime;
+    private LocalDateTime finishTime;
     private String errorMsg;
+    private LocalDateTime createTime;
+    private LocalDateTime updateTime;
 }

@@ -17,7 +17,7 @@ spring:
     uri: bolt://localhost:7687
     authentication:
       username: neo4j
-      password: neo4j
+      password: neo4j_pass
 
   # ---- Kafka ----
   kafka:
@@ -49,18 +49,36 @@ milvus:
   host: localhost
   port: 19530
 
-# ---- Embedding API ----
+# ---- AI 分析上下文（组合接口）----
+ai:
+  context:
+    max-semantic-queries: 8
+    max-nodes-hard-cap: 2000
+    max-edges-hard-cap: 8000
+    max-paths-hard-cap: 200
+    assemble-timeout-ms: 60000
+
+# ---- Embedding ----
 embedding:
-  url: https://dashscope.aliyuncs.com/api/v1/services/embeddings/text-embedding/text-embedding
-  api-key: ${EMBEDDING_API_KEY:your-api-key-here}
-  model: text-embedding-v3
+  url: http://localhost:8081/v1/embeddings
+  api-key: ${EMBEDDING_API_KEY:}
+  model: BAAI/bge-m3
   batch-size: 25
-  dimension: 1536
+  dimension: 1024
 
 # ---- Kafka Topic ----
 kafka:
   topic:
     code-change-event: code-change-event
+
+# ---- 异步任务线程池 ----
+thread-pool:
+  index-task:
+    core-size: 8
+    max-size: 16
+    queue-capacity: 100
+    keep-alive-seconds: 60
+    thread-name-prefix: index-task-
 
 # ---- 定时任务 ----
 index:

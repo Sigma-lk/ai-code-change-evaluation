@@ -6,27 +6,27 @@ package com.sigma.ai.evaluation.types;
  */
 public enum NodeType {
 
-    /** Git 仓库根节点 */
+    // Git 仓库根节点
     REPOSITORY,
 
-    /** Maven 子模块节点 */
+    // Maven 子模块节点
     MODULE,
 
-    /** Java 包节点 */
+    // Java 包节点
     PACKAGE,
 
-    /** Java 源文件节点 */
+    // Java 源文件节点
     JAVA_FILE,
 
-    /** Java 类型节点（类/接口/枚举/注解，由 kind 区分） */
+    // Java 类型节点（类/接口/枚举/注解，由 kind 区分）
     TYPE,
 
-    /** Java 方法节点（含构造器） */
+    // Java 方法节点（含构造器）
     METHOD,
 
-    /** Java 字段节点 */
+    // Java 字段节点
     FIELD,
 
-    /** Git 提交节点 */
+    // Git 提交节点
     COMMIT
 }

@@ -33,7 +33,8 @@ public class CommitRecordPortImpl implements CommitRecordPort {
         po.setCommitTime(LocalDateTime.ofEpochSecond(
                 commitTimeMillis / 1000, 0, ZoneOffset.UTC));
         po.setChangedFileCount(changedFileCount);
-        po.setProcessedAt(LocalDateTime.now(ZoneOffset.UTC));
+        // 1:PROCESSED
+        po.setStatus(1);
         commitRecordMapper.insert(po);
     }
 }

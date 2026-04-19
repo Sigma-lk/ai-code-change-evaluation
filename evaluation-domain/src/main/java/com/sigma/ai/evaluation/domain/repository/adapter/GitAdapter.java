@@ -31,6 +31,15 @@ public interface GitAdapter {
     List<ChangedFile> diffCommits(String localPath, String oldCommit, String newCommit);
 
     /**
+     * 将指定提交与其第一父提交做 tree diff，得到变更的 Java 文件列表（行为与 {@link #diffCommits} 一致）。
+     * 用于根提交等无父场景：父无法解析时返回空列表。
+     *
+     * @param localPath   本地仓库路径
+     * @param commitHash  目标提交
+     */
+    List<ChangedFile> diffCommitAgainstFirstParent(String localPath, String commitHash);
+
+    /**
      * 获取指定分支最新 HEAD 的提交 hash。
      *
      * @param localPath 本地仓库路径

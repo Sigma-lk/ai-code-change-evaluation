@@ -5,12 +5,12 @@ package com.sigma.ai.evaluation.types;
  */
 public enum FileChangeType {
 
-    /** 新增文件 */
+    // 新增文件
     ADDED,
 
-    /** 修改文件 */
+    // 修改文件
     MODIFIED,
 
-    /** 删除文件 */
+    // 删除文件
     DELETED
 }

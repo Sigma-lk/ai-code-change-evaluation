@@ -15,5 +15,8 @@ public class ParseErrorPO {
     private String filePath;
     private String errorType;
     private String errorMsg;
-    private LocalDateTime createdAt;
+    /** 0:UNRESOLVED 1:RESOLVED */
+    private Integer status;
+    private LocalDateTime createTime;
+    private LocalDateTime updateTime;
 }

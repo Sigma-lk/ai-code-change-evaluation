@@ -25,7 +25,7 @@ public interface IndexTaskMapper {
      * @param errorMsg 失败原因（成功时为 null）
      */
     void updateStatus(@Param("id") Long id,
-                      @Param("status") String status,
+                      @Param("status") Integer status,
                       @Param("errorMsg") String errorMsg);
 
     /**

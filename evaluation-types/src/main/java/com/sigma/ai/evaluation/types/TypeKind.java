@@ -5,15 +5,15 @@ package com.sigma.ai.evaluation.types;
  */
 public enum TypeKind {
 
-    /** 普通类 */
+    // 普通类
     CLASS,
 
-    /** 接口 */
+    // 接口
     INTERFACE,
 
-    /** 枚举 */
+    // 枚举
     ENUM,
 
-    /** 注解 */
+    // 注解
     ANNOTATION
 }

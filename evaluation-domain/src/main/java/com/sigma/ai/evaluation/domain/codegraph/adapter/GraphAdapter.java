@@ -1,6 +1,7 @@
 package com.sigma.ai.evaluation.domain.codegraph.adapter;
 
 import com.sigma.ai.evaluation.domain.codegraph.model.*;
+import com.sigma.ai.evaluation.domain.codegraph.model.expand.*;
 
 import java.util.List;
 
@@ -9,8 +10,6 @@ import java.util.List;
  * 由 evaluation-infrastructure 模块实现。
  */
 public interface GraphAdapter {
-
-    // ==================== 节点批量写入 ====================
 
     /** 批量 MERGE Repository 节点 */
     void batchMergeRepositoryNodes(List<RepositoryNode> nodes);
@@ -91,4 +90,47 @@ public interface GraphAdapter {
      * @return 已存储的 checksum，不存在时返回 null
      */
     String getFileChecksum(String filePath);
+
+    // ==================== 子图展开（AI 分析上下文） ====================
+
+    /**
+     * 从方法种子出发，按分组白名单多跳展开子图（CALLS 上下游及可选关系）。
+     *
+     * @param query 展开参数（种子须为非空的 Method.id 列表）
+     * @return 子图；种子为空时返回空图
+     */
+    ExpandedGraph expandSubgraph(GraphExpandQuery query);
+
+    /**
+     * 批量加载 Method / Type / Field 的展示字段，id 为 Method.id、Field.id 或 Type.qualifiedName。
+     *
+     * @param nodeIdsOrTypeKeys 与 Milvus node_id 对齐的业务键列表
+     * @return 命中的节点详情（顺序不保证与入参一致；未找到的不返回）
+     */
+    List<CodeNodeDetail> loadCodeNodeDetails(List<String> nodeIdsOrTypeKeys);
+
+    /**
+     * 从 Neo4j 读取与 Commit 通过 CHANGED_IN 关联的类型与方法种子。
+     *
+     * @param repoId     仓库 ID
+     * @param commitHash 提交 hash
+     */
+    CommitSeedSnapshot findCommitSeedsInGraph(String repoId, String commitHash);
+
+    /**
+     * 列出某类型下全部方法 id（HAS_METHOD）。
+     */
+    List<String> findMethodIdsByTypeQualifiedNames(List<String> qualifiedNames);
+
+    /**
+     * 按 JavaFile 路径（绝对或相对，与图中存储一致）解析其下所有方法 id。
+     */
+    List<String> findMethodIdsByJavaFilePaths(List<String> paths);
+
+    /**
+     * 列出某 Java 文件下应对 Milvus 执行删除的 node_id（Type 的 qualifiedName + Method 的 id）。
+     *
+     * @param javaFileAbsolutePath 与图中 JavaFile.path 一致的绝对路径
+     */
+    List<String> listEmbeddingKeysForJavaFile(String javaFileAbsolutePath);
 }

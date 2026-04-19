@@ -15,6 +15,8 @@ import com.sigma.ai.evaluation.domain.repository.adapter.RepositoryPort;
 import com.sigma.ai.evaluation.domain.repository.model.RepositoryInfo;
 import com.sigma.ai.evaluation.types.TaskStatus;
 import com.sigma.ai.evaluation.types.TaskType;
+import com.sigma.ai.evaluation.types.exception.IndexTaskException;
+import com.sigma.ai.evaluation.types.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -63,9 +65,10 @@ public class FullIndexServiceImpl implements FullIndexService {
         RepositoryInfo repo = repositoryPort.findById(repoId);
         if (repo == null) {
             log.error("全量索引中止：仓库未注册, repoId={}", repoId);
-            return;
+            throw ResourceNotFoundException.repositoryNotFound(repoId);
         }
 
+        // 插入全量索引构建任务
         IndexTask task = indexTaskPort.createTask(IndexTask.builder()
                 .repoId(repoId)
                 .taskType(TaskType.FULL)
@@ -90,9 +93,11 @@ public class FullIndexServiceImpl implements FullIndexService {
                     .updatedAt(Instant.now())
                     .build());
 
+            // 收集以 src/main/java 结尾且是目录的路径
             List<Path> sourceRoots = findSourceRoots(repoPath);
             log.info("找到 {} 个源根目录", sourceRoots.size());
 
+            // 收集.java文件
             List<Path> javaFiles = fileWalkerService.walkJavaFiles(repoPath);
             log.info("共扫描到 {} 个 .java 文件", javaFiles.size());
 
@@ -104,10 +109,9 @@ public class FullIndexServiceImpl implements FullIndexService {
         } catch (Exception e) {
             log.error("全量索引任务失败, taskId={}, repoId={}", task.getId(), repoId, e);
             indexTaskPort.updateTaskStatus(task.getId(), TaskStatus.FAIL, e.getMessage());
+            throw IndexTaskException.fullIndexFailed(e);
         }
     }
-
-    // ==================== 私有工具方法 ====================
 
     /**
      * 递归查找仓库中所有 Maven 模块的 src/main/java 目录。
@@ -137,7 +141,7 @@ public class FullIndexServiceImpl implements FullIndexService {
         int bufferedNodeCount = 0;
 
         for (Path javaFile : javaFiles) {
-            // checksum 幂等检查：已存储且未变化则跳过
+            // checksum 幂等检查，已存储且未变化则跳过
             String newChecksum = fileWalkerService.computeChecksum(javaFile);
             String storedChecksum = codeGraphService.getFileChecksum(javaFile.toString());
             if (newChecksum.equals(storedChecksum)) {
@@ -145,6 +149,7 @@ public class FullIndexServiceImpl implements FullIndexService {
                 continue;
             }
 
+            // 解析Java源文件
             ParseResult result = javaAstParserService.parse(javaFile, sourceRoots, repoId);
 
             if (!result.isSuccess()) {

@@ -1,5 +1,6 @@
 package com.sigma.ai.evaluation.trigger.controller;
 
+import com.sigma.ai.evaluation.api.controller.ImpactApi;
 import com.sigma.ai.evaluation.api.dto.ImpactAnalyzeRequest;
 import com.sigma.ai.evaluation.api.dto.ImpactAnalyzeResponse;
 import com.sigma.ai.evaluation.api.dto.SemanticSearchRequest;
@@ -11,7 +12,7 @@ import com.sigma.ai.evaluation.domain.impact.service.ImpactAnalysisService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
@@ -20,9 +21,8 @@ import java.util.List;
  */
 @Slf4j
 @RestController
-@RequestMapping("/api/v1")
 @RequiredArgsConstructor
-public class ImpactController {
+public class ImpactController implements ImpactApi {
 
     private final ImpactAnalysisService impactAnalysisService;
     private final EmbeddingStoreAdapter embeddingStoreAdapter;
@@ -33,8 +33,8 @@ public class ImpactController {
      * @param request 分析请求
      * @return 影响节点集合
      */
-    @PostMapping("/impact/analyze")
-    public ResponseEntity<ImpactAnalyzeResponse> analyze(@RequestBody ImpactAnalyzeRequest request) {
+    @Override
+    public ResponseEntity<ImpactAnalyzeResponse> analyze(ImpactAnalyzeRequest request) {
         log.info("影响面分析请求: changedMethods={}, changedTypes={}, maxHops={}",
                 request.getChangedMethodIds() != null ? request.getChangedMethodIds().size() : 0,
                 request.getChangedTypeNames() != null ? request.getChangedTypeNames().size() : 0,
@@ -61,8 +61,8 @@ public class ImpactController {
      * @param request 检索请求
      * @return 节点 ID 列表
      */
-    @PostMapping("/search/semantic")
-    public ResponseEntity<SemanticSearchResponse> semanticSearch(@RequestBody SemanticSearchRequest request) {
+    @Override
+    public ResponseEntity<SemanticSearchResponse> semanticSearch(SemanticSearchRequest request) {
         log.info("语义检索请求: query={}, repoId={}, topK={}", request.getQuery(), request.getRepoId(), request.getTopK());
         long start = System.currentTimeMillis();
 

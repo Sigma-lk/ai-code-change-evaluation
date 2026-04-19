@@ -17,6 +17,8 @@ import com.sigma.ai.evaluation.domain.repository.model.RepositoryInfo;
 import com.sigma.ai.evaluation.types.FileChangeType;
 import com.sigma.ai.evaluation.types.TaskStatus;
 import com.sigma.ai.evaluation.types.TaskType;
+import com.sigma.ai.evaluation.types.exception.IndexTaskException;
+import com.sigma.ai.evaluation.types.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -91,8 +93,8 @@ public class IndexConsumer {
         // 2. 查询仓库信息
         RepositoryInfo repo = repositoryPort.findById(repoId);
         if (repo == null) {
-            log.error("仓库未注册，跳过增量索引: repoId={}", repoId);
-            return;
+            log.error("仓库未注册，中止增量索引: repoId={}", repoId);
+            throw ResourceNotFoundException.repositoryNotFound(repoId);
         }
 
         // 3. 创建增量任务
@@ -141,7 +143,7 @@ public class IndexConsumer {
         } catch (Exception e) {
             log.error("增量索引失败: taskId={}, repoId={}", task.getId(), repoId, e);
             indexTaskPort.updateTaskStatus(task.getId(), TaskStatus.FAIL, e.getMessage());
-            throw new RuntimeException("增量索引失败", e);
+            throw IndexTaskException.incrementalIndexFailed(e);
         }
     }
 
@@ -151,9 +153,10 @@ public class IndexConsumer {
 
         for (ChangedFile file : changedFiles) {
             if (file.getChangeType() == FileChangeType.DELETED) {
-                // 删除文件：DETACH DELETE 节点及全部关联边
+                // 删除文件：先按 Type/Method 的 Milvus node_id 删向量，再删图（与 EmbeddingSubmitter 主键一致）
+                List<String> embeddingKeys = graphAdapter.listEmbeddingKeysForJavaFile(file.getAbsolutePath());
+                embeddingStoreAdapter.deleteEmbeddingsByNodeIds(embeddingKeys);
                 graphAdapter.deleteFileNodes(file.getAbsolutePath());
-                embeddingStoreAdapter.deleteEmbedding(file.getAbsolutePath());
                 continue;
             }
 
