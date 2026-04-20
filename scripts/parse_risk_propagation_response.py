@@ -5,7 +5,7 @@
 - 2xx：``RiskPropagationResponse`` — ``repoId``, ``effectiveDepth``, ``results``；``truncation`` 仅在 body 含该对象时输出（与 ``@JsonInclude(NON_NULL)`` 下无该字段时一致）。
 - 非 2xx：与 2xx 相同的 ``out`` 结构，各字段为 ``""`` / ``0`` / ``[]`` / ``truncation`` 为 ``{}``。
 
-Dify：入参绑定 HTTP 节点的 ``status_code``、``body``，整段粘贴后调用 ``main(status_code, body)``。
+Dify：入参绑定 HTTP 节点的 ``status_code``、``body``，或由 ``post_risk_propagation.main`` 返回字典中的同名字段，调用 ``main(status_code, body)``。
 """
 
 from __future__ import annotations
