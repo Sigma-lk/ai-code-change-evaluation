@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * GitHub Webhook HTTP 入口：仅处理 {@code push} 事件，完成同步增量索引、变更证据组装与 Dify 工作流投递。
+ * GitHub Webhook HTTP 入口：仅处理 {@code push} 事件，完成同步增量索引与变更证据组装；Dify 工作流异步投递，响应不等待 Dify 结束。
  */
 @Slf4j
 @RestController

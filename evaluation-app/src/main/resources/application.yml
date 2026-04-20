@@ -83,7 +83,7 @@ dify:
     enabled: true
     # 仅填 API 根地址；实际请求为 {base-url}/v1/workflows/{workflow-id}/run
     base-url: https://api.dify.ai
-    workflow-id: 1efea64a-112d-4806-b945-5c2454f81767
+    workflow-id: 6a750944-69e9-47d2-872c-2a5d1f47e986
     api-key: app-uvCK5dTLyVXfwCGK7tZxJdUD
     user: sigma
     # 工作流中定义的输入变量名，类型为 string，值为整包 JSON
@@ -100,6 +100,13 @@ thread-pool:
     queue-capacity: 100
     keep-alive-seconds: 60
     thread-name-prefix: index-task-
+  # Webhook 内异步调用 Dify（blocking 仍可能较慢，不阻塞 GitHub HTTP 应答）
+  dify-workflow:
+    core-size: 2
+    max-size: 4
+    queue-capacity: 100
+    keep-alive-seconds: 60
+    thread-name-prefix: dify-workflow-
 
 # ---- 定时任务 ----
 index:

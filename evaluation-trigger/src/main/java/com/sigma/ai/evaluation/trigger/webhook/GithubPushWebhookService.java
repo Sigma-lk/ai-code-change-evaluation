@@ -11,8 +11,8 @@ import com.sigma.ai.evaluation.domain.repository.adapter.RepositoryPort;
 import com.sigma.ai.evaluation.domain.repository.model.RepositoryInfo;
 import com.sigma.ai.evaluation.trigger.config.DifyWorkflowProperties;
 import com.sigma.ai.evaluation.trigger.config.GithubWebhookProperties;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -20,13 +20,13 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.Executor;
 
 /**
- * 处理 GitHub {@code push}：验签、对齐 repoId、增量索引、变更证据组装、Dify 投递。
+ * 处理 GitHub {@code push}：验签、对齐 repoId、增量索引、变更证据组装；Dify 工作流在独立线程池异步投递，HTTP 不等待其结束。
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class GithubPushWebhookService {
 
     private final ObjectMapper objectMapper;
@@ -36,6 +36,29 @@ public class GithubPushWebhookService {
     private final IncrementalIndexOrchestrator incrementalIndexOrchestrator;
     private final ChangeEvidenceAssembler changeEvidenceAssembler;
     private final DifyWorkflowClient difyWorkflowClient;
+    private final Executor difyWorkflowExecutor;
+
+    /**
+     * 由 Spring 注入；{@code Executor} 使用 {@code difyWorkflowExecutor} 线程池，避免与索引、向量等线程池混淆。
+     */
+    public GithubPushWebhookService(
+            ObjectMapper objectMapper,
+            GithubWebhookProperties githubWebhookProperties,
+            DifyWorkflowProperties difyWorkflowProperties,
+            RepositoryPort repositoryPort,
+            IncrementalIndexOrchestrator incrementalIndexOrchestrator,
+            ChangeEvidenceAssembler changeEvidenceAssembler,
+            DifyWorkflowClient difyWorkflowClient,
+            @Qualifier("difyWorkflowExecutor") Executor difyWorkflowExecutor) {
+        this.objectMapper = objectMapper;
+        this.githubWebhookProperties = githubWebhookProperties;
+        this.difyWorkflowProperties = difyWorkflowProperties;
+        this.repositoryPort = repositoryPort;
+        this.incrementalIndexOrchestrator = incrementalIndexOrchestrator;
+        this.changeEvidenceAssembler = changeEvidenceAssembler;
+        this.difyWorkflowClient = difyWorkflowClient;
+        this.difyWorkflowExecutor = difyWorkflowExecutor;
+    }
 
     /**
      * 处理 push 事件。
@@ -43,7 +66,7 @@ public class GithubPushWebhookService {
      * @param rawBody        原始 JSON 字节（用于签名校验）
      * @param signature256   {@code X-Hub-Signature-256}
      * @param githubEvent    {@code X-GitHub-Event}
-     * @return 200 与摘要；非 push 返回 204；签名校验失败 401；仓库未对齐 404
+     * @return 200 与摘要（不等待 Dify 工作流完成）；非 push 返回 204；签名校验失败 401；仓库未对齐 404
      */
     public ResponseEntity<GithubWebhookAck> handlePush(byte[] rawBody, String signature256, String githubEvent) {
         if (githubEvent == null || !"push".equalsIgnoreCase(githubEvent.trim())) {
@@ -175,11 +198,13 @@ public class GithubPushWebhookService {
             throw new IllegalStateException("变更证据序列化失败", e);
         }
 
-        try {
-            difyWorkflowClient.runWorkflowBlocking(evidenceJson);
-        } catch (Exception e) {
-            log.error("Dify 工作流投递失败（图谱增量已成功），repoId={}, commit={}", repo.getId(), after, e);
-        }
+        difyWorkflowExecutor.execute(() -> {
+            try {
+                difyWorkflowClient.runWorkflowBlocking(evidenceJson);
+            } catch (Exception e) {
+                log.error("Dify 工作流投递失败（异步，图谱增量已成功），repoId={}, commit={}", repo.getId(), after, e);
+            }
+        });
 
         GithubWebhookAck ack = GithubWebhookAck.builder()
                 .indexed(true)

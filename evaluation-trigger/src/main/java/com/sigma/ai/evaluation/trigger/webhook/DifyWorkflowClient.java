@@ -16,6 +16,8 @@ import java.util.Map;
 /**
  * 调用 Dify 工作流运行 API：{@code POST /v1/workflows/{workflow_id}/run}，{@code response_mode=blocking}，
  * 将变更证据 JSON 作为输入变量传递。
+ *
+ * <p>blocking 会直至工作流结束才返回，适合在专用线程池中调用，避免阻塞 Webhook HTTP 线程。
  */
 @Slf4j
 @Component
