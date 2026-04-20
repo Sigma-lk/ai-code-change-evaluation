@@ -3,6 +3,8 @@ package com.sigma.ai.evaluation.infrastructure.neo4j;
 import com.sigma.ai.evaluation.domain.codegraph.adapter.GraphAdapter;
 import com.sigma.ai.evaluation.domain.codegraph.model.*;
 import com.sigma.ai.evaluation.domain.codegraph.model.expand.*;
+import com.sigma.ai.evaluation.domain.riskpropagation.model.RiskPropagationQuery;
+import com.sigma.ai.evaluation.domain.riskpropagation.model.RiskPropagationResult;
 import com.sigma.ai.evaluation.types.RelationType;
 import com.sigma.ai.evaluation.types.exception.StorageException;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +38,7 @@ public class Neo4jGraphAdapterImpl implements GraphAdapter {
 
     private final Driver driver;
     private final Neo4jSubgraphExpander subgraphExpander;
+    private final Neo4jRiskPropagationExpander riskPropagationExpander;
 
     @Override
     public void batchMergeRepositoryNodes(List<RepositoryNode> nodes) {
@@ -651,6 +654,11 @@ public class Neo4jGraphAdapterImpl implements GraphAdapter {
             log.warn("Neo4j listEmbeddingKeysForJavaFile 失败: {}", e.getMessage());
             return Collections.emptyList();
         }
+    }
+
+    @Override
+    public RiskPropagationResult propagateRisks(RiskPropagationQuery query) {
+        return riskPropagationExpander.expand(query);
     }
 
     // 获取连接，写入neo4j

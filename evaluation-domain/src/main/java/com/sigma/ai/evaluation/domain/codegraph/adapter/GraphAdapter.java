@@ -2,6 +2,8 @@ package com.sigma.ai.evaluation.domain.codegraph.adapter;
 
 import com.sigma.ai.evaluation.domain.codegraph.model.*;
 import com.sigma.ai.evaluation.domain.codegraph.model.expand.*;
+import com.sigma.ai.evaluation.domain.riskpropagation.model.RiskPropagationQuery;
+import com.sigma.ai.evaluation.domain.riskpropagation.model.RiskPropagationResult;
 
 import java.util.List;
 
@@ -133,4 +135,12 @@ public interface GraphAdapter {
      * @param javaFileAbsolutePath 与图中 JavaFile.path 一致的绝对路径
      */
     List<String> listEmbeddingKeysForJavaFile(String javaFileAbsolutePath);
+
+    /**
+     * 按风险传播规则在 Neo4j 中有界展开影响链（与 AI 子图展开的跳数上限解耦）。
+     *
+     * @param query 已解析 {@code propagationMaxDepth}（1～30）及可选节点/边预算
+     * @return 与种子顺序对齐的传播结果
+     */
+    RiskPropagationResult propagateRisks(RiskPropagationQuery query);
 }

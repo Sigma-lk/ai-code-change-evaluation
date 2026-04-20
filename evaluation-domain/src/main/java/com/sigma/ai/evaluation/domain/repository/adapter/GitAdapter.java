@@ -1,6 +1,7 @@
 package com.sigma.ai.evaluation.domain.repository.adapter;
 
 import com.sigma.ai.evaluation.domain.repository.model.ChangedFile;
+import com.sigma.ai.evaluation.domain.repository.model.DiffLineStats;
 
 import java.util.List;
 
@@ -19,6 +20,34 @@ public interface GitAdapter {
      * @param localPath 本地存储路径
      */
     void cloneOrPull(String cloneUrl, String branch, String localPath);
+
+    /**
+     * 从默认 remote（通常为 origin）抓取引用与对象，保证本地可解析 Webhook 中的 {@code before}/{@code after}。
+     *
+     * @param localPath 本地 Git 仓库根目录
+     */
+    void fetch(String localPath);
+
+    /**
+     * 统计两次提交之间 Java 文件的增删行数（基于文本 diff，非语法树级）。
+     *
+     * @param localPath 本地仓库路径
+     * @param oldCommit   旧提交（tree 作为 diff 左侧）
+     * @param newCommit   新提交（tree 作为 diff 右侧）
+     * @return 汇总统计；无法解析提交或发生错误时返回全 0（并打日志）
+     */
+    DiffLineStats diffLineStats(String localPath, String oldCommit, String newCommit);
+
+    /**
+     * 生成单个 Java 文件在两次提交之间的 unified diff 文本（含 diff --git / --- / +++ / @@ 等）。
+     *
+     * @param localPath    本地仓库根路径
+     * @param oldCommit    旧提交（可带 {@code ^} 等 rev 语法）
+     * @param newCommit    新提交
+     * @param relativePath 仓库相对路径，使用 {@code /} 分隔（与 JGit DiffEntry 一致）
+     * @return diff 文本；无对应变更或无法生成时返回空串
+     */
+    String unifiedDiffForJavaFile(String localPath, String oldCommit, String newCommit, String relativePath);
 
     /**
      * 获取两次提交之间的变更文件列表。

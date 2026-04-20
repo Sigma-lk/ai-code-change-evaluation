@@ -233,22 +233,37 @@ IndexScheduler（按 cron 触发）
 ```
 Kafka Topic: code-change-event
   └─ IndexConsumer.onCommitEvent（手动 ACK）
-       ├─ CommitRecordPort.isProcessed     → PostgreSQL（幂等检查）
-       ├─ RepositoryPort.findById          → PostgreSQL
-       ├─ IndexTaskPort.createTask         → PostgreSQL
-       ├─ GitAdapter.diffCommits           → JGit（获取变更文件列表）
-       ├─ 按 FileChangeType 分支处理：
-       │   ├─ DELETE：
-       │   │    ├─ GraphAdapter.deleteFileNodes    → Neo4j
-       │   │    └─ EmbeddingStoreAdapter.deleteEmbedding → Milvus
-       │   └─ ADD / MODIFY：
-       │        ├─ GraphAdapter.deleteFileOutgoingRelations → Neo4j（先清旧关系）
-       │        ├─ JavaAstParserService.parse       → JavaParser
-       │        └─ CodeGraphService.batchWriteParseResults → Neo4j
-       ├─ GraphAdapter.batchMergeCommitNodes → Neo4j（记录 Commit 节点）
-       ├─ CommitRecordPort.markProcessed   → PostgreSQL
-       └─ IndexTaskPort.updateTaskStatus  → PostgreSQL
+       └─ IncrementalIndexOrchestrator.run（与 Webhook 共用）
+            ├─ CommitRecordPort.isProcessed     → PostgreSQL（幂等检查）
+            ├─ RepositoryPort.findById          → PostgreSQL
+            ├─ IndexTaskPort.createTask         → PostgreSQL
+            ├─ GitAdapter.cloneOrPull + fetch   → JGit
+            ├─ GitAdapter.diffCommits / diffCommitAgainstFirstParent → JGit（变更 Java 文件）
+            ├─ GitAdapter.diffLineStats         → JGit（行级增删统计）
+            ├─ 按 FileChangeType 分支处理：
+            │   ├─ DELETE：删 Milvus 向量 + Neo4j 文件子图
+            │   └─ ADD / MODIFY：清旧边 → JavaAstParserService.parse → Neo4j 批量写入
+            ├─ GraphAdapter.batchMergeCommitNodes → Neo4j
+            ├─ CommitRecordPort.markProcessed   → PostgreSQL
+            └─ IndexTaskPort.updateTaskStatus  → PostgreSQL
 ```
+
+### C2. GitHub Push Webhook（同步增量 + 变更证据 + Dify）
+
+```
+POST /api/v1/webhooks/github
+  Header: X-GitHub-Event: push, X-Hub-Signature-256: sha256=...
+  Body: GitHub push JSON
+
+  └─ GithubPushWebhookService
+       ├─ HMAC-SHA256 验签（github.webhook.secret，未配置则跳过并 WARN）
+       ├─ RepositoryPort.findActiveByCloneUrl（与 repository.clone_url / ssh_url 对齐 repoId）
+       ├─ IncrementalIndexOrchestrator.run（同步写 Neo4j，不经 Kafka）
+       ├─ ChangeEvidenceAssembler（ParseResult 节点 + 与行号相关的 unified diff 片段，不做图多跳搜索）
+       └─ DifyWorkflowClient → POST {dify.workflow.base-url}/v1/workflows/run（dify.workflow.enabled=true 时）
+```
+
+环境变量建议：`GITHUB_WEBHOOK_SECRET`、`DIFY_API_KEY`、可选 `DIFY_BASE_URL`。Kafka 消息体 `CommitEvent` 的包名已改为 `com.sigma.ai.evaluation.domain.index.model`，与 `spring.kafka.consumer.properties.spring.json.trusted.packages` 一致。
 
 ### D. 影响面分析（HTTP）
 
@@ -320,7 +335,20 @@ kafka:
   topic:
     code-change-event: code-change-event
 
+github:
+  webhook:
+    secret: ${GITHUB_WEBHOOK_SECRET:}
+
+dify:
+  workflow:
+    enabled: false
+    base-url: ${DIFY_BASE_URL:https://api.dify.ai}
+    api-key: ${DIFY_API_KEY:}
+    input-key: change_payload
+
 index:
   scheduler:
     cron: "0 0 2 * * ?"   # 默认每天凌晨 2 点全量索引
 ```
+
+TVbF4gU9ch7txWy4

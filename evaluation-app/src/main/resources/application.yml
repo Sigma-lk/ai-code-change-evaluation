@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: 18080
 
 spring:
   application:
@@ -29,7 +29,7 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
-        spring.json.trusted.packages: "com.sigma.ai.evaluation.trigger.consumer"
+        spring.json.trusted.packages: "com.sigma.ai.evaluation.domain.index.model"
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
@@ -70,6 +70,25 @@ embedding:
 kafka:
   topic:
     code-change-event: code-change-event
+
+# ---- GitHub Webhook（push → 同步增量索引 + 变更证据 + Dify）----
+github:
+  webhook:
+    # 与 GitHub 仓库 Webhook 密钥一致；留空则跳过签名校验（仅本地开发）
+    secret:
+
+# ---- Dify 工作流（可选）----
+dify:
+  workflow:
+    enabled: true
+    base-url: https://api.dify.ai/v1/workflows/e39cdb02-430a-4063-b85c-dcaac66dec3c/run
+    api-key: app-uvCK5dTLyVXfwCGK7tZxJdUD
+    user: sigma
+    # 工作流中定义的输入变量名，类型为 string，值为整包 JSON
+    input-key: change_payload
+    max-snippet-nodes: 120
+    snippet-padding-lines: 6
+    max-snippet-chars: 12000
 
 # ---- 异步任务线程池 ----
 thread-pool:

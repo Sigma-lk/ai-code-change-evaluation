@@ -30,4 +30,8 @@ public class GitOperationException extends BusinessException {
     public static GitOperationException headHashFailed(Throwable cause) {
         return new GitOperationException(ErrorCode.GIT_HEAD_HASH_FAILED, cause);
     }
+
+    public static GitOperationException fetchFailed(Throwable cause) {
+        return new GitOperationException(ErrorCode.GIT_FETCH_FAILED, cause);
+    }
 }

@@ -35,6 +35,7 @@ public enum ErrorCode {
     FILE_LINE_RANGE_INVALID("100009", "startLine/endLine 行号范围不合法"),
     TEXT_SEARCH_QUERY_EMPTY("100010", "文本搜索关键字 query 不能为空"),
     TEXT_SEARCH_REGEX_INVALID("100011", "正则表达式不合法"),
+    RISK_PROPAGATION_NODES_JSON_INVALID("100012", "nodes 须为合法 JSON 数组字符串"),
 
     // 20xxxx 资源不存在
     REPOSITORY_NOT_FOUND("200001", "仓库未注册"),
@@ -49,6 +50,7 @@ public enum ErrorCode {
     GIT_PULL_FAILED("300002", "Git pull 失败"),
     GIT_DIFF_FAILED("300003", "Git diff 失败"),
     GIT_HEAD_HASH_FAILED("300004", "获取 HEAD commit hash 失败"),
+    GIT_FETCH_FAILED("300005", "Git fetch 失败"),
 
     // 40xxxx 索引任务
     FULL_INDEX_FAILED("400001", "全量索引执行失败"),

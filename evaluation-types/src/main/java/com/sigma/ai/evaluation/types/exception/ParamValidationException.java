@@ -57,4 +57,11 @@ public class ParamValidationException extends BusinessException {
     public static ParamValidationException textSearchRegexInvalid(String detail) {
         return new ParamValidationException(ErrorCode.TEXT_SEARCH_REGEX_INVALID, detail);
     }
+
+    /**
+     * 风险传播请求中 {@code nodes} 字段不是合法 JSON 数组或无法反序列化为节点列表。
+     */
+    public static ParamValidationException riskPropagationNodesJsonInvalid() {
+        return new ParamValidationException(ErrorCode.RISK_PROPAGATION_NODES_JSON_INVALID);
+    }
 }

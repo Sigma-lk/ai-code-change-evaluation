@@ -2,6 +2,7 @@ package com.sigma.ai.evaluation.infrastructure.git;
 
 import com.sigma.ai.evaluation.domain.repository.adapter.GitAdapter;
 import com.sigma.ai.evaluation.domain.repository.model.ChangedFile;
+import com.sigma.ai.evaluation.domain.repository.model.DiffLineStats;
 import com.sigma.ai.evaluation.types.FileChangeType;
 import com.sigma.ai.evaluation.types.exception.GitOperationException;
 import com.sigma.ai.evaluation.types.exception.ResourceNotFoundException;
@@ -9,15 +10,21 @@ import lombok.extern.slf4j.Slf4j;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.diff.DiffEntry;
+import org.eclipse.jgit.diff.DiffFormatter;
+import org.eclipse.jgit.diff.Edit;
 import org.eclipse.jgit.lib.ObjectId;
+import org.eclipse.jgit.patch.FileHeader;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 import org.eclipse.jgit.treewalk.AbstractTreeIterator;
 import org.eclipse.jgit.treewalk.CanonicalTreeParser;
 import org.springframework.stereotype.Component;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -70,6 +77,130 @@ public class JGitAdapterImpl implements GitAdapter {
                 throw GitOperationException.cloneFailed(e);
             }
         }
+    }
+
+    @Override
+    public void fetch(String localPath) {
+        File localDir = new File(localPath);
+        try (Git git = Git.open(localDir)) {
+            git.fetch().call();
+            log.info("git fetch 完成: {}", localPath);
+        } catch (IOException | GitAPIException e) {
+            log.error("git fetch 失败: localPath={}", localPath, e);
+            throw GitOperationException.fetchFailed(e);
+        }
+    }
+
+    @Override
+    public DiffLineStats diffLineStats(String localPath, String oldCommit, String newCommit) {
+        int insertions = 0;
+        int deletions = 0;
+        int javaFiles = 0;
+        File localDir = new File(localPath);
+
+        try (Repository repository = new FileRepositoryBuilder()
+                .setGitDir(new File(localDir, ".git"))
+                .build();
+             Git git = new Git(repository)) {
+
+            ObjectId oldId = repository.resolve(oldCommit + "^{tree}");
+            ObjectId newId = repository.resolve(newCommit + "^{tree}");
+            if (oldId == null || newId == null) {
+                log.warn("diffLineStats 无法解析提交: oldCommit={}, newCommit={}", oldCommit, newCommit);
+                return DiffLineStats.builder().javaFilesTouched(0).totalInsertions(0).totalDeletions(0).build();
+            }
+
+            AbstractTreeIterator oldTreeParser = prepareTreeParser(repository, oldId);
+            AbstractTreeIterator newTreeParser = prepareTreeParser(repository, newId);
+            List<DiffEntry> diffs = git.diff()
+                    .setOldTree(oldTreeParser)
+                    .setNewTree(newTreeParser)
+                    .call();
+
+            try (DiffFormatter diffFormatter = new DiffFormatter(OutputStream.nullOutputStream())) {
+                diffFormatter.setRepository(repository);
+                diffFormatter.setContext(0);
+                for (DiffEntry entry : diffs) {
+                    String path = entry.getChangeType() == DiffEntry.ChangeType.DELETE
+                            ? entry.getOldPath() : entry.getNewPath();
+                    if (path == null || !path.endsWith(".java")) {
+                        continue;
+                    }
+                    javaFiles++;
+                    try {
+                        FileHeader fh = diffFormatter.toFileHeader(entry);
+                        for (Edit e : fh.toEditList()) {
+                            insertions += e.getEndB() - e.getBeginB();
+                            deletions += e.getEndA() - e.getBeginA();
+                        }
+                    } catch (Exception ex) {
+                        log.warn("diffLineStats 跳过条目（可能为二进制或过大）: path={}, msg={}", path, ex.getMessage());
+                    }
+                }
+            }
+        } catch (IOException | GitAPIException e) {
+            log.error("diffLineStats 失败: localPath={}, old={}, new={}", localPath, oldCommit, newCommit, e);
+            throw GitOperationException.diffFailed(e);
+        }
+
+        return DiffLineStats.builder()
+                .javaFilesTouched(javaFiles)
+                .totalInsertions(insertions)
+                .totalDeletions(deletions)
+                .build();
+    }
+
+    @Override
+    public String unifiedDiffForJavaFile(String localPath, String oldCommit, String newCommit, String relativePath) {
+        if (relativePath == null || relativePath.isBlank()) {
+            return "";
+        }
+        String want = relativePath.replace('\\', '/').replaceFirst("^/+", "");
+        File localDir = new File(localPath);
+
+        try (Repository repository = new FileRepositoryBuilder()
+                .setGitDir(new File(localDir, ".git"))
+                .build();
+             Git git = new Git(repository)) {
+
+            ObjectId oldId = repository.resolve(oldCommit + "^{tree}");
+            ObjectId newId = repository.resolve(newCommit + "^{tree}");
+            if (oldId == null || newId == null) {
+                log.warn("unifiedDiff 无法解析提交: old={}, new={}", oldCommit, newCommit);
+                return "";
+            }
+
+            AbstractTreeIterator oldTreeParser = prepareTreeParser(repository, oldId);
+            AbstractTreeIterator newTreeParser = prepareTreeParser(repository, newId);
+            List<DiffEntry> diffs = git.diff()
+                    .setOldTree(oldTreeParser)
+                    .setNewTree(newTreeParser)
+                    .call();
+
+            for (DiffEntry diff : diffs) {
+                String path = diff.getChangeType() == DiffEntry.ChangeType.DELETE
+                        ? diff.getOldPath()
+                        : diff.getNewPath();
+                if (path == null || DiffEntry.DEV_NULL.equals(path)) {
+                    continue;
+                }
+                String norm = path.replace('\\', '/');
+                if (!want.equals(norm)) {
+                    continue;
+                }
+                try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                     DiffFormatter diffFormatter = new DiffFormatter(baos)) {
+                    diffFormatter.setRepository(repository);
+                    diffFormatter.setContext(3);
+                    diffFormatter.format(diff);
+                    return baos.toString(StandardCharsets.UTF_8);
+                }
+            }
+        } catch (IOException | GitAPIException e) {
+            log.error("unifiedDiffForJavaFile 失败: localPath={}, file={}", localPath, relativePath, e);
+            throw GitOperationException.diffFailed(e);
+        }
+        return "";
     }
 
     @Override
