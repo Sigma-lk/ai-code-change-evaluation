@@ -18,6 +18,7 @@ import com.sigma.ai.evaluation.types.GraphRelationGroup;
 import com.sigma.ai.evaluation.types.exception.ParamValidationException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -45,12 +46,15 @@ public class AiContextAssemblyServiceImpl implements AiContextAssemblyService {
     public AiContextAssemblyOutput assemble(AiContextAssemblyInput in) {
         long t0 = System.currentTimeMillis();
 
+        if (StringUtils.isBlank(in.getRepoId())) {
+            throw ParamValidationException.repoIdEmpty();
+        }
         boolean wantGraph = in.getInclude() == null || Boolean.TRUE.equals(in.getInclude().getGraph());
         boolean wantSemantic = in.getInclude() == null || Boolean.TRUE.equals(in.getInclude().getSemantic());
         boolean wantSummary = in.getInclude() == null || Boolean.TRUE.equals(in.getInclude().getSummary());
 
         boolean useSemSeeds = in.getUseSemanticHitsAsGraphSeeds() == null
-                || Boolean.TRUE.equals(in.getUseSemanticHitsAsGraphSeeds());
+                || in.getUseSemanticHitsAsGraphSeeds();
 
         List<String> warnings = new ArrayList<>();
         Set<GraphRelationGroup> groups = in.getIncludeRelationGroups();
@@ -76,7 +80,6 @@ public class AiContextAssemblyServiceImpl implements AiContextAssemblyService {
         addMethodsFromFiles(in.getChangedFilePaths(), "request", methodSeeds, methodSeedSource);
 
         if (hasCommit) {
-            // TODO：没有检验repoId
             resolveCommitSeeds(in.getRepoId(), in.getCommitHash(), methodSeeds, methodSeedSource, warnings);
         }
 
