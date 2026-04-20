@@ -18,6 +18,11 @@ public class DifyWorkflowProperties {
     /** 如 https://api.dify.ai ，勿带尾斜杠 */
     private String baseUrl = "https://api.dify.ai";
 
+    /**
+     * Dify 工作流 ID（UUID），与官方路径 {@code POST /v1/workflows/{workflow_id}/run} 对应。
+     */
+    private String workflowId = "";
+
     /** 工作流应用 API Key（Bearer） */
     private String apiKey = "";
 

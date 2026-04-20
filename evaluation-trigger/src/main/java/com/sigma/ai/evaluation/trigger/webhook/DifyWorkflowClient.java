@@ -14,7 +14,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * 调用 Dify 工作流运行 API（blocking），将变更证据 JSON 作为输入变量传递。
+ * 调用 Dify 工作流运行 API：{@code POST /v1/workflows/{workflow_id}/run}，{@code response_mode=blocking}，
+ * 将变更证据 JSON 作为输入变量传递。
  */
 @Slf4j
 @Component
@@ -38,8 +39,13 @@ public class DifyWorkflowClient {
             log.warn("Dify workflow.api-key 未配置，跳过调用");
             return;
         }
+        if (properties.getWorkflowId() == null || properties.getWorkflowId().isBlank()) {
+            log.warn("Dify workflow.workflow-id 未配置，跳过调用");
+            return;
+        }
         String base = properties.getBaseUrl().replaceAll("/+$", "");
-        String url = base + "/v1/workflows/run";
+        String wfId = properties.getWorkflowId().trim();
+        String url = base + "/v1/workflows/" + wfId + "/run";
 
         Map<String, Object> inputs = new LinkedHashMap<>();
         inputs.put(properties.getInputKey(), changePayloadJson);
