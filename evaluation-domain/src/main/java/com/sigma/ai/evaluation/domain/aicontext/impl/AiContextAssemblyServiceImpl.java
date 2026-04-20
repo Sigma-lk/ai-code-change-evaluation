@@ -44,9 +44,6 @@ public class AiContextAssemblyServiceImpl implements AiContextAssemblyService {
     @Override
     public AiContextAssemblyOutput assemble(AiContextAssemblyInput in) {
         long t0 = System.currentTimeMillis();
-        if (in.getRepoId() == null || in.getRepoId().isBlank()) {
-            throw ParamValidationException.repoIdEmpty();
-        }
 
         boolean wantGraph = in.getInclude() == null || Boolean.TRUE.equals(in.getInclude().getGraph());
         boolean wantSemantic = in.getInclude() == null || Boolean.TRUE.equals(in.getInclude().getSemantic());
@@ -79,6 +76,7 @@ public class AiContextAssemblyServiceImpl implements AiContextAssemblyService {
         addMethodsFromFiles(in.getChangedFilePaths(), "request", methodSeeds, methodSeedSource);
 
         if (hasCommit) {
+            // TODO：没有检验repoId
             resolveCommitSeeds(in.getRepoId(), in.getCommitHash(), methodSeeds, methodSeedSource, warnings);
         }
 

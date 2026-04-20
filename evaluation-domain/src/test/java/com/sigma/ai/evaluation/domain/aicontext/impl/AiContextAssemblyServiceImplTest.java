@@ -48,15 +48,18 @@ class AiContextAssemblyServiceImplTest {
     }
 
     @Test
-    void assemble_repoIdEmpty_throws() {
+    void assemble_repoIdBlank_noLongerRejected_usesSemanticBranch() {
+        when(embeddingStoreAdapter.semanticSearchRich(any())).thenReturn(List.of());
         AiContextAssemblyInput in = AiContextAssemblyInput.builder()
                 .repoId("  ")
                 .semanticQueries(List.of("x"))
+                .useSemanticHitsAsGraphSeeds(false)
                 .build();
-        assertThatThrownBy(() -> service.assemble(in))
-                .isInstanceOf(ParamValidationException.class)
-                .extracting("code")
-                .isEqualTo(ErrorCode.REPO_ID_EMPTY.getCode());
+
+        AiContextAssemblyOutput out = service.assemble(in);
+
+        assertThat(out.getMeta().getRepoId()).isEqualTo("  ");
+        org.mockito.Mockito.verify(embeddingStoreAdapter).semanticSearchRich(any());
     }
 
     @Test
