@@ -66,6 +66,7 @@ public class AiContextAssemblyServiceImpl implements AiContextAssemblyService {
         }
 
         boolean hasSemantic = in.getSemanticQueries() != null && !in.getSemanticQueries().isEmpty();
+        boolean hasExplicit = hasExplicitStructuralInput(in);
         boolean hasCommit = in.getCommitHash() != null && !in.getCommitHash().isBlank();
 
         LinkedHashSet<String> methodSeeds = new LinkedHashSet<>();
@@ -76,7 +77,6 @@ public class AiContextAssemblyServiceImpl implements AiContextAssemblyService {
         addMethodsFromFiles(in.getChangedFilePaths(), "request", methodSeeds, methodSeedSource);
 
         if (hasCommit) {
-            // TODO:缺少repoId为空的校验
             resolveCommitSeeds(in.getRepoId(), in.getCommitHash(), methodSeeds, methodSeedSource, warnings);
         }
 
@@ -225,6 +225,9 @@ public class AiContextAssemblyServiceImpl implements AiContextAssemblyService {
      * @throws ParamValidationException repoId 为空或缺少任一上下文来源时抛出
      */
     private static void validateAssembleInput(AiContextAssemblyInput in) {
+        if (StringUtils.isBlank(in.getRepoId())) {
+            throw ParamValidationException.repoIdEmpty();
+        }
         boolean hasSemantic = in.getSemanticQueries() != null && !in.getSemanticQueries().isEmpty();
         boolean hasExplicit = hasExplicitStructuralInput(in);
         boolean hasCommit = in.getCommitHash() != null && !in.getCommitHash().isBlank();
