@@ -89,7 +89,7 @@ DEVELOPER_REPORT_PROMPT_TEMPLATE = """你是一名资深研发负责人，依据
 1. **唯一事实源**：风险正文只能复述、归纳、改写 ``riskJudgments`` 中**已出现**的信息，并可借助 ``summaryText`` 判断是否与变更语境矛盾，但**禁止**把摘要段落复述进 ``report``。不得把常识、行业通识或模型「推测」当作本次变更中已发生的事实写进报告。
 2. **禁止捏造**：不得虚构或补充输入中**不存在**的仓库路径、类名、方法名、``qualifiedName``、``filePath``、提交哈希、作者、行数统计、依赖版本、CVE 编号、线上事故、监控结论、测试结果或任何具体数字与专有名词；**不得**编造传播链 hop、图数据库命中情况或 API 行为。
 3. **引用边界**：凡涉及代码位置、节点、建议动作，须能在输入字段中找到依据（如 ``investigation_targets``、``action_suggestions``、``identification``、``judgment`` 等）；若输入未给出具体路径或动作，只写方向性表述并明确写「输入未提供具体位置/步骤」，**不得**自行补全为看似真实的细节。
-4. **不确定表述**：证据不足、字段缺失时，使用保守措辞（如「依据当前输入无法判断」「结论以识别节点输出为准」），**禁止**用肯定语气掩盖信息缺口。
+4. **不确定表述**：证据不足、字段缺失时，使用保守措辞（如「依据当前输入无法判断」），**禁止**用肯定语气掩盖信息缺口；与「二」中**禁止结论性收尾**一致，不得用「结论以…为准」类话术充当正文结论。
 
 一、输入说明（JSON 片段）
 
@@ -100,7 +100,7 @@ summaryText（string）
 
 riskJudgments（array）
 来自 ``dify_risk_identification_prompt_builder`` 所约定 LLM 输出的 ``risk_judgments``；元素字段可能含：
-``risk_index``、``risk_name``、``identification``、``judgment``、``verdict``、``priority_after``、``confidence_after``、``investigation_targets``、``action_suggestions`` 等。请按 ``risk_index`` 升序（若缺失则按数组顺序）覆盖**全部**条目，不得遗漏。
+``risk_index``、``risk_name``、``identification``、``judgment``、``verdict``、``priority_after``、``confidence_after``、``investigation_targets``、``action_suggestions`` 等。输出 ``report`` 时须**重新排序**后覆盖**全部**条目，不得遗漏：**主序**按 ``priority_after``（如 Px）中 **x 数字升序**（P1 先于 P2，数字越小越优先）；无法解析或缺失的条目排在**已可解析条目之后**，相互间保持输入数组中的相对顺序。**次序**在同一 ``priority_after``（含同缺失档）内按 ``confidence_after`` **数值降序**（越大越靠前）；缺失置信度的排在**同档内有数值者之后**。**``priority_after`` 与 ``confidence_after`` 均相同**（含均缺失且同属一档）的多条，顺序可任意（等价随机），但不得漏项。
 
 <<<RISK_JUDGMENTS_JSON>>>
 
@@ -108,15 +108,17 @@ riskJudgments（array）
 
 ``report`` 为 **HTML 片段**：将来由发送端插入已有 HTML 文档的 ``<body>`` 与 ``</body>`` **之间**（``head``/``body``/``html``/``DOCTYPE`` 及 charset 等已由服务端统一提供）。你**只生成 body 内正文**，**禁止**输出 ``<!DOCTYPE``、``<html``、``<head``、``<body``、``</body>``、``</html>``、``<meta charset`` 等文档壳或重复声明编码。
 
-内容要求：``report`` 中**只呈现**按序编号的风险条目，**不要**总标题、**不要**摘要段落、**不要**开场白/结语套话。按 ``risk_index`` 升序（若缺失则按数组顺序）覆盖 **全部** ``risk_judgments`` 条目，不得遗漏。
+内容要求：``report`` 中**只呈现**按序编号的风险条目，**不要**总标题、**不要**摘要段落、**不要**开场白/结语套话。条目顺序须遵守上文「重新排序」规则，覆盖 **全部** ``risk_judgments``，不得遗漏。
 
 每条风险在 HTML 中须体现三块信息（可用多行 ``<tr><td>`` 或段落性 ``<td>`` 分段，保持阅读顺序清晰）：
 
-1. **标题行**（半角数字序号 + 半角句点 + 半角空格；名称与评级用中文全角括号「（」「）」）：``序号``. （``risk_name`` 与输入**完全一致**，不得改写）（评级）
-2. **分析**：综合 ``identification`` 与 ``judgment``；自然语言交代 ``verdict``、``priority_after``、``confidence_after``（枚举词可保留英文并用中文解释）
+1. **标题行**（半角数字序号 + 半角句点 + 半角空格）：``序号``. ``risk_name``（ … ）。其中 ``risk_name`` 与输入**完全一致**，不得改写；紧跟其后的**一对全角括号「（」「）」内仅写** ``priority_after`` 与 ``confidence_after``：**``priority_after``** 以半角形式写出（如 ``P2``）；**置信度**固定写为「置信度为」+ 半角数字（与输入一致，如 ``0.35``）；二者用全角逗号「，」分隔；左括号后保留半角空格，整体示例：（ P2，置信度为 0.35）。**不要**在括号内或 ``risk_name`` 与括号之间再写「高优先级」「中优先级」等赘述。缺失 ``priority_after`` 或 ``confidence_after`` 时，括号内对应位置写保守说明（如「输入未提供优先级」「输入未提供置信度」），不得臆造 Px 或数值。
+2. **分析**：综合 ``identification`` 与 ``judgment`` 做证据与因果说明；**禁止**给出结论性收尾或裁决式表述（例如「结论为…」「综上判定为…」「最终结论…」「verdict 为…」及对 ``verdict`` 的显式复述/翻译当作定论）；**禁止**在分析段再次重复标题括号内的 Px 与置信度数字（避免冗余）。可客观转述证据强弱、信息缺口，但不以「结论」话术收束。
 3. **排查建议**：合并 ``investigation_targets`` 与 ``action_suggestions`` 为可执行短句，避免堆砌字段名
 
-「评级」为简短中文短语，优先依据 ``priority_after`` 与 ``verdict``；缺失则写 ``（输入未提供评级）`` 等保守表述。序号从 1 起。字段缺失时在对应块内说明「输入未提供」，不得臆测细节。
+**类名与方法名书写（强制）**：正文中**禁止**使用 ``类名#方法名`` 形式指代代码位置；一律写为「**类名**的**方法名**()」：无参方法写空括号 ``()``；有参方法写半角括号及参数表，与输入或可追溯字段一致即可（示例：``InfrastructureConfig的restTemplate()``、``DifyWorkflowHttpConfig的difyWorkflowRestTemplate(DifyWorkflowProperties)``）。若输入本身仅有 ``#`` 记法，输出前须改写为上述「的…()」形式。
+
+序号从 1 起（排序后的第一条为 1）。字段缺失时在对应块内说明「输入未提供」，不得臆测细节。
 
 三、HTML 邮件兼容与版式（优先级高；简单坚固优于花哨）
 **A. 布局与 CSS**
@@ -155,7 +157,7 @@ riskJudgments（array）
 
 六、输出形状示例（字段名与类型须一致；``report`` 内为高度简化的 table 示意，真实输出须满足第三节约束并写满全部风险条目）
 
-{"report":"<table role=\\"presentation\\" width=\\"100%\\" cellpadding=\\"0\\" cellspacing=\\"0\\" border=\\"0\\" style=\\"margin:0;padding:0;\\"><tr><td align=\\"center\\" style=\\"padding:16px 8px;\\"><table role=\\"presentation\\" width=\\"650\\" cellpadding=\\"0\\" cellspacing=\\"0\\" border=\\"0\\" style=\\"max-width:650px;font-family:Arial,Helvetica,sans-serif;color:#333333;\\"><tr><td style=\\"font-size:16px;line-height:1.5;padding-bottom:12px;\\"><strong>1. （鉴权相关方法变更）（高优先级）</strong></td></tr><tr><td style=\\"font-size:14px;line-height:1.6;padding-bottom:12px;\\">……分析……</td></tr><tr><td style=\\"font-size:14px;line-height:1.6;padding-bottom:24px;border-bottom:1px solid #eeeeee;\\">……排查建议……</td></tr><tr><td style=\\"height:16px;\\"></td></tr><tr><td style=\\"font-size:16px;line-height:1.5;padding-bottom:12px;\\"><strong>2. （另一风险名称）（中优先级）</strong></td></tr><tr><td style=\\"font-size:14px;line-height:1.6;\\">……</td></tr></table></td></tr></table>"}
+{"report":"<table role=\\"presentation\\" width=\\"100%\\" cellpadding=\\"0\\" cellspacing=\\"0\\" border=\\"0\\" style=\\"margin:0;padding:0;\\"><tr><td align=\\"center\\" style=\\"padding:16px 8px;\\"><table role=\\"presentation\\" width=\\"650\\" cellpadding=\\"0\\" cellspacing=\\"0\\" border=\\"0\\" style=\\"max-width:650px;font-family:Arial,Helvetica,sans-serif;color:#333333;\\"><tr><td style=\\"font-size:16px;line-height:1.5;padding-bottom:12px;\\"><strong>1. 鉴权相关方法变更（ P1，置信度为 0.82）</strong></td></tr><tr><td style=\\"font-size:14px;line-height:1.6;padding-bottom:12px;\\">……分析（无结论性收尾；代码位置用「类名的method()」）……</td></tr><tr><td style=\\"font-size:14px;line-height:1.6;padding-bottom:24px;border-bottom:1px solid #eeeeee;\\">……排查建议……</td></tr><tr><td style=\\"height:16px;\\"></td></tr><tr><td style=\\"font-size:16px;line-height:1.5;padding-bottom:12px;\\"><strong>2. 另一风险名称（ P2，置信度为 0.45）</strong></td></tr><tr><td style=\\"font-size:14px;line-height:1.6;\\">……</td></tr></table></td></tr></table>"}
 """
 
 
