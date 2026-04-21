@@ -5,6 +5,29 @@ spring:
   application:
     name: ai-code-change-evaluation
 
+  # ---- 邮件（163 等 SMTP，可选；不配 host 则不启用 MailController / HtmlMailPortImpl）----
+  # 163：网页邮箱 → 设置 → POP3/SMTP/IMAP → 开启 SMTP，并使用「客户端授权码」作为 password。
+  mail:
+   host: smtp.163.com
+   port: 465
+   username: 19121220069@163.com
+   password: MSXs65vhDM4i3kKr
+   default-encoding: UTF-8
+   properties:
+     mail:
+       smtp:
+         auth: true
+         ssl:
+           enable: true
+  # 若使用 STARTTLS（端口以厂商说明为准，常见 25/587），可改为：
+  #   properties:
+  #     mail:
+  #       smtp:
+  #         auth: true
+  #         starttls:
+  #           enable: true
+  #           required: true
+
   # ---- PostgreSQL ----
   datasource:
     url: jdbc:postgresql://localhost:5432/ai_evaluation
@@ -83,7 +106,7 @@ dify:
     enabled: true
     # 仅填 API 根地址；实际请求为 {base-url}/v1/workflows/{workflow-id}/run
     base-url: https://api.dify.ai
-    workflow-id: 7874b65f-ec25-4b9d-bbe1-310b62a82c40
+    workflow-id: 834064d1-523b-421a-a010-ca4000d1b131
     api-key: app-uvCK5dTLyVXfwCGK7tZxJdUD
     user: sigma
     # 工作流中定义的输入变量名，类型为 string，值为整包 JSON

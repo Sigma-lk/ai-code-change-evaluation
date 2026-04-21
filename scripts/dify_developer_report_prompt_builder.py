@@ -5,7 +5,7 @@
 用法（Dify「代码」节点）：
 1. 上游 A：摘要节点 LLM 输出，根对象含 ``summary``（string）等，或直接传入摘要字符串；摘要**仅作风险叙述的事实对齐参考**，不要求写入最终报告。
 2. 上游 B：风险识别与判断节点 LLM 输出，根对象含 ``risk_judgments``（array），或直接传入该数组。
-3. 返回 ``{"prompt": "..."}``，供下游 LLM 节点生成 JSON：根对象**仅**含 ``report``（纯文本风格正文，无 Markdown/HTML）。
+3. 返回 ``{"prompt": "..."}``，供下游 LLM 节点生成 JSON：根对象**仅**含 ``report``（**HTML 邮件正文片段**，用于由服务端包入 ``<body>`` 后发送，非整页 HTML）。
 
 入参约定：
 - ``summary``：**str**（摘要正文）或 **dict**（须含 ``summary`` 键；可另含 ``title``，本脚本只读取 ``summary``）；非法时当作空字符串。
@@ -104,38 +104,58 @@ riskJudgments（array）
 
 <<<RISK_JUDGMENTS_JSON>>>
 
-二、report 正文（仅风险分析；禁止摘要）
+二、report 正文（HTML 邮件片段；仅风险分析；禁止摘要）
 
-``report`` 中**只写**按序编号的风险条目，**不要**写总标题、**不要**写摘要、**不要**写开场白或结语套话。每条风险须严格按下列版式（换行符在 JSON 中写作 ``\\n``；条目之间用**一个**空行分隔即可，即连续两个换行 ``\\n\\n``，**不要**连续多个空行）：
+``report`` 为 **HTML 片段**：将来由发送端插入已有 HTML 文档的 ``<body>`` 与 ``</body>`` **之间**（``head``/``body``/``html``/``DOCTYPE`` 及 charset 等已由服务端统一提供）。你**只生成 body 内正文**，**禁止**输出 ``<!DOCTYPE``、``<html``、``<head``、``<body``、``</body>``、``</html>``、``<meta charset`` 等文档壳或重复声明编码。
 
-首行固定形态（半角数字序号 + 半角句点 + 半角空格；名称与评级外使用中文全角括号「（」「）」）：
-``序号``. ``（`` + 该条 ``risk_name``（与输入**完全一致**，不得改写） + ``）（`` + 评级 + ``）``
-下一行起为**正文**（须单独起段：综合 ``identification`` 与 ``judgment`` 说明指什么、证据支持何种结论；自然语言交代 ``verdict``、``priority_after``、``confidence_after`` 的含义，枚举词可保留英文但须用中文解释语义）
-再换行后为**排查建议**（须单独起段：合并 ``investigation_targets`` 与 ``action_suggestions`` 为可执行短句，避免堆砌字段名）
+内容要求：``report`` 中**只呈现**按序编号的风险条目，**不要**总标题、**不要**摘要段落、**不要**开场白/结语套话。按 ``risk_index`` 升序（若缺失则按数组顺序）覆盖 **全部** ``risk_judgments`` 条目，不得遗漏。
 
-示例形态（仅说明结构；勿照抄措辞）：``1. （鉴权相关方法变更）（高优先级）`` 后换行写正文，再换行写排查建议；下一条为 ``2. （另一风险名称）（中优先级）``，以此类推。
+每条风险在 HTML 中须体现三块信息（可用多行 ``<tr><td>`` 或段落性 ``<td>`` 分段，保持阅读顺序清晰）：
 
-其中「评级」为简短中文短语，优先依据 ``priority_after`` 与 ``verdict`` 概括；若缺失则写 ``（输入未提供评级）`` 等保守表述。序号从 1 起，与排序后的条目一一对应。
+1. **标题行**（半角数字序号 + 半角句点 + 半角空格；名称与评级用中文全角括号「（」「）」）：``序号``. （``risk_name`` 与输入**完全一致**，不得改写）（评级）
+2. **分析**：综合 ``identification`` 与 ``judgment``；自然语言交代 ``verdict``、``priority_after``、``confidence_after``（枚举词可保留英文并用中文解释）
+3. **排查建议**：合并 ``investigation_targets`` 与 ``action_suggestions`` 为可执行短句，避免堆砌字段名
 
-若某条缺少部分字段，在正文或建议中用保守措辞说明「输入未提供」，不得臆测或补全虚构细节。
+「评级」为简短中文短语，优先依据 ``priority_after`` 与 ``verdict``；缺失则写 ``（输入未提供评级）`` 等保守表述。序号从 1 起。字段缺失时在对应块内说明「输入未提供」，不得臆测细节。
 
-三、版式与编码硬性约束
+三、HTML 邮件兼容与版式（优先级高；简单坚固优于花哨）
+**A. 布局与 CSS**
 
-1. ``report`` 字符串：使用汉字、数字、常用中文标点、阿拉伯数字序号与半角句点（如 ``1.``）、换行符；**禁止** Markdown（包括但不限于 ``#``、``##``、星号强调、``-`` / ``*`` 列表、反引号、代码围栏、链接语法）、**禁止** HTML 标签与实体。
+1. **以 ``<table>`` 为主布局**：用嵌套 ``<table>`` 搭出结构；最外层可用 ``width="100%"`` 的表格，内部再嵌 **主内容区** 宽度 **650px**（600–800px 范围内；优先 650px）的表格承载正文。**不要**用 ``<div>`` 做主要分栏布局。
+2. **行内样式为主**：``width``、``padding``、``margin``、``background-color``、``color``、``font-size``、``line-height``、``font-family``、``text-align``、``border`` 等关键样式写在对应标签的 ``style="..."`` 中。
+3. **慎用 ``<style>``**：你的片段位于 ``body`` 内；即便写 ``<style>`` 也可能被 Gmail 等剥离。**不要**依赖 ``<style>`` 呈现关键版式；若使用，仅作非关键增强（如部分客户端的媒体查询），且不得作为唯一手段。
+4. **禁止外部样式表**：不得 ``<link rel="stylesheet"`` 或引用外部 CSS。
+5. **少用** ``position``/``float``/``flex``/``grid``/``transform``/``filter`` 等现代布局与特效作为结构依赖；**避免**依赖 ``background-image``（Outlook 等支持差）；需要色块背景优先 ``bgcolor`` 与 ``style`` 中的 ``background-color`` 在 ``<td>`` 上配合使用。
+
+**B. 设计与内容**
+
+1. 主内容区固定宽度（如上 650px），外层表格可 ``width="100%"`` 且内容区 ``align="center"``，使桌面与移动端观感稳定。
+2. **图片**（若无可靠绝对 URL 则**不要**插入 ``<img>``，用文字排版即可）：若使用图片，须 **https 绝对 URL**；``<img>`` 上写清 ``width``/``height``（属性）与 ``alt``；**禁止**「整封邮件一张大图」式排版，须图文/文字可独立阅读。
+3. **字体与颜色**：``font-family`` 使用网络安全字体栈，例如 ``Arial, Helvetica, sans-serif`` 或 ``Georgia, Times New Roman, serif``，并以 ``sans-serif``/``serif`` 结尾；颜色用 **6 位十六进制**（如 ``#333333``），保证对比度易读。
+
+**C. 交互与链接**
+
+1. **禁止 JavaScript**：不得出现 ``<script>`` 及任何脚本、事件属性依赖脚本的交互。
+2. **不用动画**：不依赖 CSS 动画/过渡。
+3. **链接**：若写链接，须 **https 完整绝对 URL**；为 ``<a>`` 设置明确的 ``color`` 与 ``text-decoration``（如保留可识别的下划线样式），避免用户看不出可点击。
+
+四、编码与其它硬性约束
+
+1. ``report`` 为 **HTML 字符串**（片段）。正文中**不要**使用 Markdown 语法（如 ``#``、``##``、``**``、``-`` 列表、反引号围栏等）代替 HTML 结构；代码/标识符如需强调，用 ``<span style="...">`` 等行内标签即可。
 2. 变量名、方法名、类名、``qualifiedName``、``filePath``、枚举值等**本身为英文**的可原样保留，周围用中文说明即可。
-3. ``report`` 的字符总长度（按 Unicode 码点计，含标点、空格与换行符）**不得超过 3000**；若素材过多，**优先压缩**各条正文的重复表述与次要细节，但**不得删除**任一风险条目，且每条须保留至少一条可执行排查建议。
+3. ``report`` 的字符总长度（按 Unicode 码点计，含标签、样式、标点与空白）**不得超过 8000**；若素材过多，**优先压缩**重复表述与次要装饰性 HTML，但**不得删除**任一风险条目，且每条须保留至少一条可执行排查建议。
 4. 语气专业、克制、面向开发者；避免耸人听闻或与输入证据不符的断言。
+5. JSON 内嵌 HTML 时，须正确转义 JSON 特殊字符（尤其是属性中的双引号写作 ``\"``、反斜杠写作 ``\\`` 等），保证整段回复可被标准 JSON 解析器**一次**解析成功。
 
-四、输出格式（必须严格遵守）
+五、输出格式（必须严格遵守）
 
 1. 最终回复**只能是合法 JSON**，根对象**须且仅须**含一个键（小写键名、值为字符串）：``report``。**不要**输出 ``title`` 键或任何总标题字段。
-2. ``report``：仅含上述编号风险正文；换行须按 JSON 字符串规则转义为 ``\\n``。
-3. 字符串值须符合 JSON 转义规则，保证可被标准 JSON 解析器一次解析成功。
-4. **不要**在 JSON 前后输出说明文字、井号标题或代码围栏；除上述 JSON 文本外不得有任何额外字符。
+2. ``report``：仅含上述 **HTML 片段**（无文档最外层标签）。
+3. **不要**在 JSON 前后输出说明文字、井号标题或 Markdown 代码围栏；除上述 JSON 文本外不得有任何额外字符。
 
-五、输出形状示例（字段名与类型须一致；内容为示意）
+六、输出形状示例（字段名与类型须一致；``report`` 内为高度简化的 table 示意，真实输出须满足第三节约束并写满全部风险条目）
 
-{"report":"1. （鉴权相关方法变更）（高优先级）\\n……分析……\\n……排查建议……\\n\\n2. （另一风险名称）（中优先级）\\n……\\n……"}
+{"report":"<table role=\\"presentation\\" width=\\"100%\\" cellpadding=\\"0\\" cellspacing=\\"0\\" border=\\"0\\" style=\\"margin:0;padding:0;\\"><tr><td align=\\"center\\" style=\\"padding:16px 8px;\\"><table role=\\"presentation\\" width=\\"650\\" cellpadding=\\"0\\" cellspacing=\\"0\\" border=\\"0\\" style=\\"max-width:650px;font-family:Arial,Helvetica,sans-serif;color:#333333;\\"><tr><td style=\\"font-size:16px;line-height:1.5;padding-bottom:12px;\\"><strong>1. （鉴权相关方法变更）（高优先级）</strong></td></tr><tr><td style=\\"font-size:14px;line-height:1.6;padding-bottom:12px;\\">……分析……</td></tr><tr><td style=\\"font-size:14px;line-height:1.6;padding-bottom:24px;border-bottom:1px solid #eeeeee;\\">……排查建议……</td></tr><tr><td style=\\"height:16px;\\"></td></tr><tr><td style=\\"font-size:16px;line-height:1.5;padding-bottom:12px;\\"><strong>2. （另一风险名称）（中优先级）</strong></td></tr><tr><td style=\\"font-size:14px;line-height:1.6;\\">……</td></tr></table></td></tr></table>"}
 """
 
 
@@ -148,6 +168,7 @@ def build_developer_report_prompt(
 
     :param summary: 摘要字符串或含 ``summary`` 的对象（可与 ``title`` 同存）；摘要仅嵌入模版供模型参考，不要求出现在输出中。
     :param risk_judgments: 判断数组或 ``{"risk_judgments":[...]}``。
+    :return: ``{"prompt": "..."}``，下游 LLM 应输出仅含 ``report``（HTML 邮件正文片段）的 JSON。
     """
     summary_text = _extract_summary_text(summary)
     rj = _extract_risk_judgments(risk_judgments)
@@ -167,6 +188,7 @@ def main(summary: Any, riskJudgments: Any) -> dict:
 
     :param summary: 摘要字符串或含 ``summary`` 的对象（可含 ``title``）；字符串若为整段 JSON 则先解析；摘要仅用于 prompt 内参考。
     :param riskJudgments: ``risk_judgments`` 数组或含该键的根对象；字符串 JSON 时先 ``json.loads``。
+    :return: ``{"prompt": "..."}``，供下游生成 HTML 片段写入 ``report``。
     """
     sm = summary
     if isinstance(sm, str) and sm.strip().startswith("{"):
