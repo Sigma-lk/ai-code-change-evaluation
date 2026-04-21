@@ -1,8 +1,8 @@
 package com.sigma.ai.evaluation.trigger.webhook;
 
 import com.sigma.ai.evaluation.trigger.config.DifyWorkflowProperties;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -21,11 +21,17 @@ import java.util.Map;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class DifyWorkflowClient {
 
     private final RestTemplate restTemplate;
     private final DifyWorkflowProperties properties;
+
+    public DifyWorkflowClient(
+            @Qualifier("difyWorkflowRestTemplate") RestTemplate restTemplate,
+            DifyWorkflowProperties properties) {
+        this.restTemplate = restTemplate;
+        this.properties = properties;
+    }
 
     /**
      * 以 blocking 模式触发工作流。

@@ -199,10 +199,17 @@ public class GithubPushWebhookService {
         }
 
         difyWorkflowExecutor.execute(() -> {
+            log.info("Dify 工作流异步投递开始: repoId={}, commit={}, thread={}",
+                    repo.getId(), after, Thread.currentThread().getName());
+            boolean success = false;
             try {
                 difyWorkflowClient.runWorkflowBlocking(evidenceJson);
+                success = true;
             } catch (Exception e) {
                 log.error("Dify 工作流投递失败（异步，图谱增量已成功），repoId={}, commit={}", repo.getId(), after, e);
+            } finally {
+                log.info("Dify 工作流异步投递结束: repoId={}, commit={}, success={}",
+                        repo.getId(), after, success);
             }
         });
 

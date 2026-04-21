@@ -42,4 +42,13 @@ public class DifyWorkflowProperties {
 
     /** 每个片段最大字符 */
     private int maxSnippetChars = 12000;
+
+    /**
+     * 调用 Dify 工作流（{@code response_mode=blocking}）时的 HTTP 读超时（毫秒）。
+     * 与 Webhook 异步投递线程配合，需覆盖工作流整体执行时间。
+     */
+    private long readTimeoutMs = 300_000L;
+
+    /** 建立 TCP 连接超时（毫秒） */
+    private long connectTimeoutMs = 30_000L;
 }

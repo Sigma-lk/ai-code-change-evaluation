@@ -2,6 +2,7 @@ package com.sigma.ai.evaluation.infrastructure.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.web.client.RestTemplate;
@@ -16,11 +17,15 @@ import java.util.concurrent.Executor;
 public class InfrastructureConfig {
 
     /**
-     * 供 EmbeddingApiClient 使用的 RestTemplate。
+     * 供 EmbeddingApiClient 等通用 HTTP 调用使用的 RestTemplate。
+     *
+     * <p>标记为 {@code @Primary}，避免与 trigger 模块中专用于 Dify 长耗时 blocking 调用的
+     * {@code difyWorkflowRestTemplate} 产生注入歧义。
      *
      * @return RestTemplate
      */
     @Bean
+    @Primary
     public RestTemplate restTemplate() {
         return new RestTemplate();
     }

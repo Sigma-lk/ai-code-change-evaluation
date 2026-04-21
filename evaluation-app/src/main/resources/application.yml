@@ -114,6 +114,9 @@ dify:
     max-snippet-nodes: 120
     snippet-padding-lines: 6
     max-snippet-chars: 12000
+    # blocking 工作流整体可能较慢；与 Webhook 内异步线程中的 HTTP 读超时一致（毫秒）
+    read-timeout-ms: 300000
+    connect-timeout-ms: 30000
 
 # ---- 异步任务线程池 ----
 thread-pool:
