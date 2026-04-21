@@ -106,7 +106,7 @@ dify:
     enabled: true
     # 仅填 API 根地址；实际请求为 {base-url}/v1/workflows/{workflow-id}/run
     base-url: https://api.dify.ai
-    workflow-id: 00b6e081-9783-4b23-9418-1c46df5dbb37
+    workflow-id: 71cadf22-7ac6-43e2-b013-a674040ce351
     api-key: app-uvCK5dTLyVXfwCGK7tZxJdUD
     user: sigma
     # 工作流中定义的输入变量名，类型为 string，值为整包 JSON

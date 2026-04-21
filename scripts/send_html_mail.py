@@ -26,16 +26,16 @@ HTTP_TIMEOUT_SEC = 60.0
 
 
 def main(
-    to: str,
     subject: str,
     html_body: str,
+    to: str = "19121220069@163.com",
 ) -> dict[str, Any]:
     """
     向评估服务提交发送 HTML 邮件请求。
 
-    :param to: 收件人邮箱
     :param subject: 邮件主题（可为空字符串）
     :param html_body: HTML 片段（服务端会包裹文档壳并指定 UTF-8）
+    :param to: 收件人邮箱（省略时使用模块内默认地址，便于本地/Dify 快速试发）
     :return: ``{"status_code": int, "body": dict | str}``；``body`` 在 JSON 解析失败时为原始响应文本
     """
     base = BASE_URL.rstrip("/")
@@ -88,7 +88,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
 def cli(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     html = args.html_body if args.html_body is not None else args.html_file.read_text(encoding="utf-8")
-    result = main(args.to, args.subject, html)
+    result = main(args.subject, html, args.to)
     status = result["status_code"]
     body = result["body"]
     if isinstance(body, dict):
