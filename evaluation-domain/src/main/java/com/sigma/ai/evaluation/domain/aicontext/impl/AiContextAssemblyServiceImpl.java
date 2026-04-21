@@ -46,9 +46,9 @@ public class AiContextAssemblyServiceImpl implements AiContextAssemblyService {
     public AiContextAssemblyOutput assemble(AiContextAssemblyInput in) {
         long t0 = System.currentTimeMillis();
 
-        // 校验入参
-        validateAssembleInput(in);
-        
+        AssembleSourceFlags sources = AssembleSourceFlags.from(in);
+        validateAssembleInput(in, sources);
+
         boolean wantGraph = in.getInclude() == null || Boolean.TRUE.equals(in.getInclude().getGraph());
         boolean wantSemantic = in.getInclude() == null || Boolean.TRUE.equals(in.getInclude().getSemantic());
         boolean wantSummary = in.getInclude() == null || Boolean.TRUE.equals(in.getInclude().getSummary());
@@ -65,9 +65,8 @@ public class AiContextAssemblyServiceImpl implements AiContextAssemblyService {
             warnings.add("默认未展开 IMPORTS 与目录结构（STRUCTURE），跨编译单元静态牵连可能不完整");
         }
 
-        boolean hasSemantic = in.getSemanticQueries() != null && !in.getSemanticQueries().isEmpty();
-        boolean hasExplicit = hasExplicitStructuralInput(in);
-        boolean hasCommit = in.getCommitHash() != null && !in.getCommitHash().isBlank();
+        boolean hasSemantic = sources.hasSemantic();
+        boolean hasCommit = sources.hasCommit();
 
         LinkedHashSet<String> methodSeeds = new LinkedHashSet<>();
         Map<String, String> methodSeedSource = new HashMap<>();
@@ -77,7 +76,6 @@ public class AiContextAssemblyServiceImpl implements AiContextAssemblyService {
         addMethodsFromFiles(in.getChangedFilePaths(), "request", methodSeeds, methodSeedSource);
 
         if (hasCommit) {
-            // TODO: repoId非空校验
             resolveCommitSeeds(in.getRepoId(), in.getCommitHash(), methodSeeds, methodSeedSource, warnings);
         }
 
@@ -222,15 +220,29 @@ public class AiContextAssemblyServiceImpl implements AiContextAssemblyService {
     /**
      * 校验 {@link #assemble(AiContextAssemblyInput)} 的入参：仓库 ID 必填，且需提供语义查询、结构化变更或 commit 之一作为上下文来源。
      *
-     * @param in 组装入参
+     * @param in 组装入参（用于 repoId 等字段校验）
+     * @param sources 由 {@link AssembleSourceFlags#from(AiContextAssemblyInput)} 一次性解析的上下文来源标志
      * @throws ParamValidationException repoId 为空或缺少任一上下文来源时抛出
      */
-    private static void validateAssembleInput(AiContextAssemblyInput in) {
-        boolean hasSemantic = in.getSemanticQueries() != null && !in.getSemanticQueries().isEmpty();
-        boolean hasExplicit = hasExplicitStructuralInput(in);
-        boolean hasCommit = in.getCommitHash() != null && !in.getCommitHash().isBlank();
-        if (!hasSemantic && !hasExplicit && !hasCommit) {
+    private static void validateAssembleInput(AiContextAssemblyInput in, AssembleSourceFlags sources) {
+        if (StringUtils.isBlank(in.getRepoId())) {
+            throw ParamValidationException.repoIdEmpty();
+        }
+        if (!sources.hasSemantic() && !sources.hasExplicitStructural() && !sources.hasCommit()) {
             throw ParamValidationException.aiContextNoInput();
+        }
+    }
+
+    /**
+     * 语义查询 / 结构化变更 / commit 三类来源是否存在的标志，供 {@link #validateAssembleInput} 与 {@link #assemble} 共用，避免重复计算。
+     */
+    private record AssembleSourceFlags(boolean hasSemantic, boolean hasExplicitStructural, boolean hasCommit) {
+
+        static AssembleSourceFlags from(AiContextAssemblyInput in) {
+            boolean hasSemantic = in.getSemanticQueries() != null && !in.getSemanticQueries().isEmpty();
+            boolean hasExplicitStructural = hasExplicitStructuralInput(in);
+            boolean hasCommit = in.getCommitHash() != null && !in.getCommitHash().isBlank();
+            return new AssembleSourceFlags(hasSemantic, hasExplicitStructural, hasCommit);
         }
     }
 
