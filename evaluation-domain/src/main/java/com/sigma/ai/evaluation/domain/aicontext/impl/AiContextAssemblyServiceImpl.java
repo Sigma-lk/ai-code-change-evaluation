@@ -225,9 +225,6 @@ public class AiContextAssemblyServiceImpl implements AiContextAssemblyService {
      * @throws ParamValidationException repoId 为空或缺少任一上下文来源时抛出
      */
     private static void validateAssembleInput(AiContextAssemblyInput in, AssembleSourceFlags sources) {
-        if (StringUtils.isBlank(in.getRepoId())) {
-            throw ParamValidationException.repoIdEmpty();
-        }
         if (!sources.hasSemantic() && !sources.hasExplicitStructural() && !sources.hasCommit()) {
             throw ParamValidationException.aiContextNoInput();
         }
